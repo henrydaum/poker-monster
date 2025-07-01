@@ -1,149 +1,140 @@
-from flask import Flask, render_template, redirect, url_for, session
-# Import information needed to rewrite run_game() for a server
-from poker_monster import build_decks, Player, GameState, create_action, hyperparameters, Network
-
-# Need to store the gamestate and the previous AI hidden state in the session (like a cache)
-# The session can't hold the gamestate directly, must convert all information to and from dicts
+from flask import Flask, render_template, redirect, url_for, session, request
+import torch
+from poker_monster import Network, create_action, GameState, Player, hyperparameters
 
 app = Flask(__name__)
 # A secret key is required to use sessions
 app.secret_key = 'a_very_secret_key'
 
-hyperparameters = {
-    # Network architecture:
-    "lstm_size": 70,
-    "num_lstm_layers": 3,  # Ignore dropout warning if X=1
-    "feedforward_size": 70,
-    # Reward shaping:
-    "long_term_gamma": 0.95,  # Lower values decay the end-of-game reward to earlier turns faster
-    "short_term_gamma": 0.75,
-    "negative_reward_clamp": float('-inf'),  # Clamp negative rewards to this value to make them less punishing. All rewards below this value are set to this value (set to float('-inf') to disable)
-    # Learning rate parameters (LR scheduler):
-    "lr":1e-3,  # For 5 or more epochs, use 1e-4; for 1 epoch use 1e-3 (no scheduler)
-    "use_lr_scheduler": True,  # lr scheduler (cosine annealing)
-    "T_0": 250,  # lr cosine anneal period (repeats every X games with warm restarts)
-    "T_mult": 1,  # Multiply T_0 by this factor every time it restarts (default is 1)
-    "eta_min": 1e-5,  # Anneal from lr (above) to this lr
-    # Misc. Parameters:
-    "dropout_rate": 0.2,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
-    "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights
-    "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed
-    "temperature": 2,  # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
-    "entropy_coef": 0.025,  # Higher values slow down learning, increase exploration, and slow convergence.
-}
-
-# Load AIs
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 hero_ai = Network(name="hero", **hyperparameters)
 monster_ai = Network(name="monster", **hyperparameters)
-try:
-    hero_ai.load("hero")
-except:
-    print("No hero_ai to load")
-try:
-    monster_ai.load("monster")
-except:
-    print("No monster_ai to load")
 
-def take_ai_turn(gs):
-    while gs.me.player_type.startswith("computer_ai"):
-        # AI takes turns until it is the user's turn
-        if gs.me.name == "hero":
-            choice_number, hidden state = hero_ai.sample_action(gs, training=False)
-        elif gs.me.name == "monster":
-            choice_number, hidden state = monster_ai.sample_action(gs, training=False)
+def serialize_hidden_state(state_tuple):
+    """Converts a PyTorch hidden state tuple into a serializable list tuple."""
+    h_n_tensor, c_n_tensor = state_tuple
+    return (h_n_tensor.tolist(), c_n_tensor.tolist())
+
+def deserialize_hidden_state(state_lists):
+    """Converts a list tuple from the session back into a PyTorch hidden state."""
+    if not state_lists:
+        return None
+    h_n_list, c_n_list = state_lists
+    h_n_tensor = torch.tensor(h_n_list).to(device)
+    c_n_tensor = torch.tensor(c_n_list).to(device)
+    return (h_n_tensor, c_n_tensor)
+
+def take_ai_turn(gs, prev_hidden_state):
+    """Processes the AI's turn, managing its hidden state."""
+    # This loop handles cases where the AI might take multiple actions in a row
+    # (e.g., if it draws a card that lets it play another card)
+    while gs.winner is None and gs.me.player_type.startswith("computer_ai"):
+        current_ai = hero_ai if gs.me.name == "hero" else monster_ai
+        
+        choice_number, new_hidden_state = current_ai.sample_action(gs, prev_hidden_state, training=False)
+        prev_hidden_state = new_hidden_state # Use the new state for the next potential loop
+
         action = create_action(gs, choice_number)
-        action.enact()
+        action.enact() # This function modifies gs in place
+
+    return gs, new_hidden_state
 
 @app.route("/")
-def index():
-    """Initial route to start a new game."""
-    # Need to somehow ask user if they want to play Hero or Monster
-    user_choice = "hero"
-    if user_choice == "hero":
-        hero_player_type == "person"
-        monster_player_type == "computer_ai"
-    else:
-        hero_player_type == "computer_ai"
-        monster_player_type == "person"
+def choice_screen():
+    """Displays the initial screen for the user to choose their role."""
+    session.clear() # Clear any old game data before starting a new one
+    return render_template('choice.html')
 
-    # Build decks and create player instances
+@app.route("/start_game")
+def start_game():
+    """Initializes a new game based on the user's role choice."""
+    user_role = request.args.get('role')
+
+    # FIX: Use assignment (=) instead of comparison (==)
+    if user_role == 'hero':
+        hero_player_type = "person"
+        monster_player_type = "computer_ai"
+    elif user_role == 'monster':
+        hero_player_type = "computer_ai"
+        monster_player_type = "person"
+    else:
+        return redirect(url_for('choice_screen'))
+    
     hero_deck, monster_deck = build_decks()
     hero = Player("hero", hero_deck, hero_player_type)
     monster = Player("monster", monster_deck, monster_player_type)
-
-    # coin flip to see who goes first
-    coin_flip = randint(0, 1)
-    going_first = None
-    if coin_flip == 0:  # Heads is for Monster, obviously
-        going_first = "monster"
-        monster.going_first = True
-    else:
-        going_first = "hero"
-        hero.going_first = True
     
-    # Create and configure the initial game state
-    gs = GameState(hero, monster, turn_priority=going_first)
+    going_first = "hero" if random.randint(0, 1) == 1 else "monster"
+    if going_first == "hero":
+        hero.going_first = True
+    else:
+        monster.going_first = True
+    
+    gs = GameState(hero, monster, going_first, PHASE_AWAITING_INPUT, cache=[], game_mode=0)
     gs.hero.shuffle()
     gs.monster.shuffle()
     gs.hero.draw(4)
     gs.monster.draw(4)
 
-    # Initialize AI hidden state
-    session['hidden_state'] = 
-    
-    # If the AI is going first, go ahead and take its turn
+    # Initialize a blank hidden state for the AIs
+    h0 = torch.zeros(hyperparameters["num_lstm_layers"], hyperparameters["lstm_size"])
+    c0 = torch.zeros(hyperparameters["num_lstm_layers"], hyperparameters["lstm_size"])
+    hidden_state = (h0, c0)
+
+    # If the AI goes first, let it take its turn now
     if gs.me.player_type.startswith("computer_ai"):
-        take_ai_turn(gs)
+        gs, hidden_state = take_ai_turn(gs, hidden_state)
 
-    # Store the game state object in the session
-    session['gs'] = gs.to_dict() # You'll need to add a to_dict() method
+    # Store the initial game and AI states in the session
+    session["gs"] = gs.to_dict()
+    session["hidden_state"] = serialize_hidden_state(hidden_state)
+    
+    return redirect(url_for('display_gs'))
 
-    return redirect(url_for('display_gamestate'))
-
-# Turns gamestate into HTML
-@app.route("/gamestate")
-def display_gamestate():
-    """Displays the gamestate and possible actions."""
-    # Load game state from the session
+@app.route("/gs")
+def display_gs():
+    """Displays the current game state and possible actions."""
     if 'gs' not in session:
-        return redirect(url_for('index'))
+        return redirect(url_for("choice_screen"))
 
-    gs = GameState.from_dict(session['gs']) # You'll need a from_dict() method
+    gs = gs.from_dict(session["gs"])
 
-    # Check for a winner
     if gs.winner:
-        return render_template('winner.html', winner=gs.winner)  # Separate winner page with option to restart
+        return render_template("winner.html", winner=gs.winner)
+    
+    # Get the necessary info to display
+    game_info = get_display_info(gs)
+    available_actions = get_available_actions(gs)
+    
+    return render_template("game.html", info=game_info, actions=available_actions)
 
-    return render_template('game.html', info=game_info, actions=available_actions)
-
-# Turns HTML into an action
 @app.route("/action/<int:action_id>")
 def do_action(action_id):
-    """Changes the gamestate based on the user's actions and takes the AI's turn."""
+    """Handles a user's action, then processes the AI's turn."""
     if 'gs' not in session:
-        return redirect(url_for('index'))
+        return redirect(url_for("choice_screen"))
     
-    gs = GameState.from_dict(session['gs'])
+    # Load both the game state and the AI's hidden state
+    gs = gs.from_dict(session["gs"])
+    hidden_state = deserialize_hidden_state(session.get("hidden_state"))
 
-    # Create and execute the action
+    # Execute the user's action
     action = create_action(gs, action_id)
     legal, reason = action.is_legal()
-    
     if legal:
-        action.enact()
-        # This part of your logic might need adjustment for a web interface
+        action.enact() # This updates gs
     else:
-        # Optionally, you can pass an error message to the user
-        session['error_message'] = reason
-    
-    # If it's the AI's turn:
-    if gs.me.player_type.startswith("computer_ai"):
-        take_ai_turn(gs)
+        session["error"] = reason
 
-    # Save the updated game state back to the session
-    session['gs'] = gs.to_dict()
+    # If the game isn't over, let the AI take its turn
+    if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
+        gs, hidden_state = take_ai_turn(gs, hidden_state)
+
+    # Save the updated states back to the session
+    session["gs"] = gs.to_dict()
+    session["hidden_state"] = serialize_hidden_state(hidden_state)
     
-    return redirect(url_for('display_gamestate'))
+    return redirect(url_for("display_gs"))
 
 if __name__ == "__main__":
     app.run(debug=True)

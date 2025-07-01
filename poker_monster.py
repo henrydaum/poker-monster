@@ -133,6 +133,37 @@ class Card:
         # Every effect has its own subclass.
         raise NotImplementedError("Subclass must implement effect()")
 
+    def to_dict(self):
+        # Encode Card into a dictionary that HTML can use
+        data = {
+            "name": self.name,
+            "card_id": self.card_id,
+            "uid": self.uid,
+            "owner": self.owner,
+            "card_type": self.card_type,
+            "power_cost": self.power_cost,
+            "health": self.health,
+            "starting_health": self.starting_health,
+            "card_text": self.card_text,
+        }
+        return data
+
+    @classmethod
+    def from_dict(cls, data):
+        # Take the dictionary and use its values to call create_card (turns HTML into a Card)
+        card =  create_card(
+            name=data["name"],
+            card_id=data["card_id"],
+            uid=data["uid"],
+            owner=data["owner"],
+            card_type=data["card_type"],
+            power_cost=data["power_cost"],
+            health=data["health"],
+            card_text=data["card_text"]
+        )
+        card.starting_health = data["starting_health"]
+        return card
+
 class Awakening(Card):
     def effect(self, gs):
         #print("Playing Awakening")
@@ -384,6 +415,52 @@ class Player:
             card.effect(gs)
         self.graveyard.append(card)
 
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "health": self.health,
+            "power": self.power,
+            "power_plays_left": self.power_plays_left,
+            "power_plays_made_this_turn": self.power_plays_made_this_turn,
+            "last_stand_buff": self.last_stand_buff,
+            "monsters_pawn_buff": self.monsters_pawn_buff,
+            "going_first": self.going_first,
+            "player_type": self.player_type,
+            "action_number": self.action_number,
+
+            # Create a list of nested card dictionaries for each card zone
+            "hand": [card.to_dict() for card in self.hand],
+            "deck": [card.to_dict() for card in self.deck],
+            "battlefield": [long_card.to_dict() for long_card in self.battlefield],
+            "graveyard": [card.to_dict() for card in self.graveyard],
+            "power_cards": [power_card.to_dict() for power_card in self.power_cards],
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        # Create a new Player instance. Note the empty deck for now.
+        player = cls(name=data['name'], deck=[], player_type=data['player_type'])
+
+        # Set the simple attributes
+        player.health = data["health"]
+        player.power = data["power"]
+        player.power_plays_left = data["power_plays_left"]
+        player.power_plays_made_this_turn = data["power_plays_made_this_turn"]
+        player.last_stand_buff = data["last_stand_buff"]
+        player.monsters_pawn_buff = data["monsters_pawn_buff"]
+        player.going_first = data["going_first"]
+        player.player_type = data["player_type"]
+        player.action_number = data ["action_number"]
+
+        # Rebuild the card lists using Card.from_dict()
+        player.hand = [Card.from_dict(card_data) for card_data in data["hand"]]
+        player.deck = [Card.from_dict(card_data) for card_data in data["deck"]]
+        player.battlefield = [Card.from_dict(card_data) for card_data in data["battlefield"]]
+        player.graveyard = [Card.from_dict(card_data) for card_data in data["graveyard"]]
+        player.power_cards = [Card.from_dict(card_data) for card_data in data["power_cards"]]
+
+        return player
+
 
 # ## The GameState Class
 # 
@@ -555,6 +632,62 @@ class GameState:
             return hero_reward
         elif perspective == "monster":
             return monster_reward
+
+    def to_dict(self):
+        # Turns the gs into a dictionary that HTML can read
+        return {
+            # Call the methods you already wrote for Player
+            "hero": self.hero.to_dict(),
+            "monster": self.monster.to_dict(),
+
+            # Save the simple attributes
+            "turn_priority": self.turn_priority,
+            "game_phase": self.game_phase,
+            "turn_number": self.turn_number,
+            "winner": self.winner,
+            "game_mode": self.game_mode,
+
+            # Flags:
+            "card_played_this_turn": self.card_played_this_turn,
+            "short_card_played_this_turn": self.short_card_played_this_turn,
+
+            # Reward data:
+            "tempo": self.tempo,
+            "killer_combo": self.killer_combo,
+            "long_card_value": self.long_card_value,
+
+            # The cache is a list of cards, so we serialize it like other card lists
+            "cache": [card.to_dict() for card in self.cache]
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        # Rebuild the complex objects first
+        hero = Player.from_dict(data["hero"])
+        monster = Player.from_dict(data["monster"])
+        cache = [Card.from_dict(card_data) for card_data in data["cache"]]
+
+        # Create a new GameState instance with the rebuilt players
+        gs = cls(
+            hero=hero,
+            monster=monster,
+            turn_priority=data["turn_priority"],
+            game_phase=data["game_phase"],
+            cache=cache,
+            game_mode=data["game_mode"]
+        )
+
+        # Set any remaining attributes
+        gs.turn_number = data["turn_number"]
+        gs.game_phase = data["game_phase"]
+        gs.winner = data["winner"]
+        gs.card_played_this_turn = data["card_played_this_turn"]
+        gs.short_card_played_this_turn = data["short_card_played_this_turn"]
+        gs.tempo = data["tempo"]
+        gs.killer_combo = data["killer_combo"]
+        gs.long_card_value = data["long_card_value"]
+
+        return gs
 
 
 # ## The Action Class
@@ -937,6 +1070,8 @@ class SelectFromBattlefield(Action):
             self.gs.tempo += 1  # You *should* target the opponent's long cards
         if self.resolving_card.name == "Poker Face" and self.target.name in ["The Sun", "The Moon"]:
             self.gs.tempo -= 0  # This is overkill, but still okay in some situations
+            if any(long_card.name in ["A Playful Pixie", "A Pearlescent Dragon"] for long_card in self.gs.opp.battlefield):
+                self.gs.tempo -= 2  # You shouldn't target the sun or the moon if you can kill a bigger card
         if self.resolving_card.name == "Cheap Shot" and self.target.name in ["The Sun", "The Moon"]:
             self.gs.tempo += 2  # This is not overkill, Cheap Shot is meant to kill these cards
         if self.resolving_card.name == "Poker Face" and self.target.name in ["A Playful Pixie", "A Pearlescent Dragon", "Monster's Pawn"]:
@@ -1900,7 +2035,7 @@ class Network(nn.Module):
         # Return masked logits
         return mask, tempos  # Save mask for training since making actions is intensive and saving gs is a bad idea
 
-    def sample_action(self, gs, training=False):
+    def sample_action(self, gs, prev_hidden_state=None, training=False):
         # This is the main function that is called from the main loop (outside here) to get an action based on NN inference.
         # Input a gamestate (gs), returns an action_id (an integer).
         ctx = torch.inference_mode() if (self.epochs > 1 or training==False) else nullcontext()
@@ -1917,7 +2052,7 @@ class Network(nn.Module):
             # Reshape for lstm
             x = x.unsqueeze(0)
             # Retreive previous lstm_state
-            prev_lstm_state = self.memory["lstm_states"][-1]
+            prev_lstm_state = prev_hidden_state if prev_hidden_state else self.memory["lstm_states"][-1]
             # Do forward pass
             logits, new_lstm_state = self(x, prev_lstm_state)
             # print(f"Action {len(self.memory['action_ids'])-1} sample logits {logits}")
@@ -1950,7 +2085,7 @@ class Network(nn.Module):
                 self.memory["logprobs"].append(logprob)
                 self.memory["lstm_states"].append(new_lstm_state)
 
-            return action_id
+            return action_id, new_lstm_state
 
     def train_network(self, baseline, epochs=1):
         # This is the training loop that is called after the game is over, data has been collected, and there is a winner (or tie)
@@ -2063,8 +2198,8 @@ class Network(nn.Module):
             policy_loss = -logprobs * reward_signals.detach()
             total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean()  # Use mean and not sum to avoid favoring short games
             losses.append(total_loss.item())
-            # losses.append(self.optimizer.param_groups[0]['lr'])  # To watch learning rates
-            self.optimizer.zero_grad()
+            losses.append(self.optimizer.param_groups[0]['lr'])  # To watch learning rates
+            # self.optimizer.zero_grad()
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
             self.optimizer.step()
@@ -2079,12 +2214,21 @@ class Network(nn.Module):
         return losses
 
     def save(self, name):
-        torch.save(self.state_dict(), f"ai_weights_{name}.pth")
-        print(f"Saved PyTorch model to ai_{name}.pth")
+        import os
+        # Get the current working directory
+        directory = os.getcwd()
+        # Create the full file path by joining the directory and filename
+        file_path = os.path.join(directory, f"ai_weights_{name}.pth")
+
+        # Save the model
+        torch.save(self.state_dict(), file_path)
+
+        # Print the full, unambiguous path
+        print(f"Saved PyTorch model to: {file_path}")
 
     def load(self, name):
         self.load_state_dict(torch.load(f"ai_weights_{name}.pth", weights_only=True))
-        print(f"Loaded PyTorch model from ai_{name}.pth")
+        print(f"Loaded PyTorch model from ai_weights_{name}.pth")
 
     def get_state_dict(self):
         # For population-based training
@@ -2177,6 +2321,9 @@ class Main:
         hero.draw(4)
         monster.draw(4)
 
+        gs_dict = gs.to_dict()
+        gs = GameState.from_dict(gs_dict)
+
         while gs.winner is None:      
             # time.sleep(5)  # To slow it down
             if display:
@@ -2198,9 +2345,9 @@ class Main:
                     # For a computer AI:
                     elif gs.me.player_type == "computer_ai":
                         if gs.me.name == "hero":
-                            choice_number = current_ai.sample_action(gs, train_hero)
+                            choice_number, _ = current_ai.sample_action(gs, training=train_hero)
                         elif gs.me.name == "monster":
-                            choice_number = current_ai.sample_action(gs, train_monster)
+                            choice_number, _ = current_ai.sample_action(gs, training=train_monster)
                     # Create the action
                     action = create_action(gs, choice_number)
                     # Test if legal
@@ -2529,6 +2676,9 @@ class Main:
 
 # This contains the hyperparameters I used to train my model, as well as the training schedule I set up.
 
+get_ipython().system('ls /  # Shows that you are connected to Paperspace cloud GPU')
+# Sometimes bugs occur from using a remote kernel.
+
 hyperparameters = {
     # Network architecture:
     "lstm_size": 70,
@@ -2539,17 +2689,17 @@ hyperparameters = {
     "short_term_gamma": 0.75,
     "negative_reward_clamp": float('-inf'),  # Clamp negative rewards to this value to make them less punishing. All rewards below this value are set to this value (set to float('-inf') to disable)
     # Learning rate parameters (LR scheduler):
-    "lr":1e-3,  # For 5 or more epochs, use 1e-4; for 1 epoch use 1e-3 (no scheduler)
+    "lr":5e-3,  # For 5 or more epochs, use 1e-4; for 1 epoch use 1e-3 (no scheduler)
     "use_lr_scheduler": True,  # lr scheduler (cosine annealing)
     "T_0": 250,  # lr cosine anneal period (repeats every X games with warm restarts)
     "T_mult": 1,  # Multiply T_0 by this factor every time it restarts (default is 1)
-    "eta_min": 1e-5,  # Anneal from lr (above) to this lr
+    "eta_min": 5e-6,  # Anneal from lr (above) to this lr
     # Misc. Parameters:
     "dropout_rate": 0.2,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
     "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights
     "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed
     "temperature": 2,  # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
-    "entropy_coef": 0.025,  # Higher values slow down learning, increase exploration, and slow convergence.
+    "entropy_coef": 0.02,  # Higher values slow down learning, increase exploration, and slow convergence.
 }
 
 game_settings = {
@@ -2572,41 +2722,46 @@ game_settings = {
     "testing_display": True,
     # Misc.:
     "game_mode": 0,
-    "scale": 40  # Lower values are *less* zoomed in
+    "scale": 50  # Lower values are *less* zoomed in
 }
 
-# main = Main(hyperparameters, **game_settings)
+main = Main(hyperparameters, **game_settings)
 # main.load_ai_weights()
 
 # Training program:
-# for i in range(4):
-#     print(f"\nRound {i+1}, FIGHT!")
-#     # Pretrain Monster on random Hero
-#     main.training_hero_type = "computer_random"
-#     main.training_monster_type = "computer_ai"
-#     main.train_on_wins("monster", 250)
-#     # Pretrain Hero on random Monster
-#     main.training_hero_type = "computer_ai"
-#     main.training_monster_type = "computer_random"
-#     main.train_on_wins("hero", 250)
-#     # Train Hero and Monster on a pool of their past opponents
-#     main.training_hero_type = "computer_ai"
-#     main.training_monster_type = "computer_ai"
-#     # main.anneal_temperature = True
-#     # main.anneal_entropy = True
-#     main.train_on_population(500)
-#     # Turn off annealing
-#     # main.anneal_temperature = False
-#     # main.anneal_entropy = False
-#     main.hero_ai.temperature /= 2
-#     main.monster_ai.temperature /= 2
-#     main.hero_ai.entropy_coef /= 2
-#     main.monster_ai.entropy_coef /= 2
+for i in range(5):
+    print(f"\nRound {i+1}, FIGHT!")
+    # Pretrain Monster on random Hero
+    main.training_hero_type = "computer_random"
+    main.training_monster_type = "computer_ai"
+    main.train_on_wins("monster", 250)
+    # Pretrain Hero on random Monster
+    main.training_hero_type = "computer_ai"
+    main.training_monster_type = "computer_random"
+    main.train_on_wins("hero", 250)
+    # Train Hero and Monster on a pool of their past opponents
+    main.training_hero_type = "computer_ai"
+    main.training_monster_type = "computer_ai"
+    # main.anneal_temperature = True
+    # main.anneal_entropy = True
+    main.train_on_population(500)
+    # Turn off annealing
+    # main.anneal_temperature = False
+    # main.anneal_entropy = False
+    # Anneal after every loop
+    main.hero_ai.temperature /= 2
+    main.monster_ai.temperature /= 2
+    main.hero_ai.entropy_coef /= 2
+    main.monster_ai.entropy_coef /= 2
+    main.hero_ai.optimizer.param_groups[0]['lr'] /= 2
+    main.monster_ai.optimizer.param_groups[0]['lr'] /= 2
 # After training, test the AI against each other
-# main.hero_training = False
-# main.monster_training = False
-# main.hero_ai.temperature = 0.0001
-# main.monster_ai.temperature = 0.0001
-# main.do_testing_loop(1)
-# main.plot_graphs()
-# main.save_ai_weights()
+main.hero_training = False
+main.monster_training = False
+main.hero_ai.temperature = 0.0001
+main.monster_ai.temperature = 0.0001
+main.do_testing_loop(1)
+main.plot_graphs()
+main.save_ai_weights()
+# If using Paperspace, weights will be saved to the cloud
+
