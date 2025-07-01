@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Poker Monster</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding-top: 50px; }
+        .container { max-width: 600px; margin: auto; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .winner-announcement { font-size: 36px; font-weight: bold; margin-bottom: 20px; }
+        .choice-box a, .restart-button a {
+            display: inline-block;
+            padding: 15px 30px;
+            font-size: 20px;
+            text-decoration: none;
+            color: white;
+            background-color: #007bff;
+            border-radius: 8px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to Poker Monster</h1>
+
+        {% if winner %}
+            <h2 class="winner-announcement">Game Over! Winner: {{ winner.upper() }}</h2>
+            <div class="restart-button">
+                <a href="{{ url_for('choice_screen') }}">Play Again</a>
+            </div>
+        {% else %}
+            <h2>Choose Your Role</h2>
+            <div class="choice-box">
+                <a href="{{ url_for('start_game', role='hero') }}">Play as Hero</a>
+                <a href="{{ url_for('start_game', role='monster') }}">Play as Monster</a>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>

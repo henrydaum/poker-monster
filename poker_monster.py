@@ -128,6 +128,13 @@ class Card:
         self.starting_health = health  # Used to reset health after a card dies so it can be played again.
         self.card_text = card_text  # Will be displayed
 
+    def __eq__(self, other):
+        if not isinstance(other, Card):
+            return NotImplemented
+        
+        # Return True if their uids are the same, False otherwise
+        return self.uid == other.uid
+
     def effect(self, gs) -> None:
         # Changes the game state based on the card's effect. 
         # Every effect has its own subclass.
@@ -2227,7 +2234,7 @@ class Network(nn.Module):
         print(f"Saved PyTorch model to: {file_path}")
 
     def load(self, name):
-        self.load_state_dict(torch.load(f"ai_weights_{name}.pth", weights_only=True))
+        self.load_state_dict(torch.load(f"ai_weights_{name}.pth", map_location=device))
         print(f"Loaded PyTorch model from ai_weights_{name}.pth")
 
     def get_state_dict(self):
@@ -2676,9 +2683,6 @@ class Main:
 
 # This contains the hyperparameters I used to train my model, as well as the training schedule I set up.
 
-get_ipython().system('ls /  # Shows that you are connected to Paperspace cloud GPU')
-# Sometimes bugs occur from using a remote kernel.
-
 hyperparameters = {
     # Network architecture:
     "lstm_size": 70,
@@ -2725,43 +2729,43 @@ game_settings = {
     "scale": 50  # Lower values are *less* zoomed in
 }
 
-main = Main(hyperparameters, **game_settings)
-# main.load_ai_weights()
+# main = Main(hyperparameters, **game_settings)
+# # main.load_ai_weights()
 
-# Training program:
-for i in range(5):
-    print(f"\nRound {i+1}, FIGHT!")
-    # Pretrain Monster on random Hero
-    main.training_hero_type = "computer_random"
-    main.training_monster_type = "computer_ai"
-    main.train_on_wins("monster", 250)
-    # Pretrain Hero on random Monster
-    main.training_hero_type = "computer_ai"
-    main.training_monster_type = "computer_random"
-    main.train_on_wins("hero", 250)
-    # Train Hero and Monster on a pool of their past opponents
-    main.training_hero_type = "computer_ai"
-    main.training_monster_type = "computer_ai"
-    # main.anneal_temperature = True
-    # main.anneal_entropy = True
-    main.train_on_population(500)
-    # Turn off annealing
-    # main.anneal_temperature = False
-    # main.anneal_entropy = False
-    # Anneal after every loop
-    main.hero_ai.temperature /= 2
-    main.monster_ai.temperature /= 2
-    main.hero_ai.entropy_coef /= 2
-    main.monster_ai.entropy_coef /= 2
-    main.hero_ai.optimizer.param_groups[0]['lr'] /= 2
-    main.monster_ai.optimizer.param_groups[0]['lr'] /= 2
-# After training, test the AI against each other
-main.hero_training = False
-main.monster_training = False
-main.hero_ai.temperature = 0.0001
-main.monster_ai.temperature = 0.0001
-main.do_testing_loop(1)
-main.plot_graphs()
-main.save_ai_weights()
+# # Training program:
+# for i in range(5):
+#     print(f"\nRound {i+1}, FIGHT!")
+#     # Pretrain Monster on random Hero
+#     main.training_hero_type = "computer_random"
+#     main.training_monster_type = "computer_ai"
+#     main.train_on_wins("monster", 250)
+#     # Pretrain Hero on random Monster
+#     main.training_hero_type = "computer_ai"
+#     main.training_monster_type = "computer_random"
+#     main.train_on_wins("hero", 250)
+#     # Train Hero and Monster on a pool of their past opponents
+#     main.training_hero_type = "computer_ai"
+#     main.training_monster_type = "computer_ai"
+#     # main.anneal_temperature = True
+#     # main.anneal_entropy = True
+#     main.train_on_population(500)
+#     # Turn off annealing
+#     # main.anneal_temperature = False
+#     # main.anneal_entropy = False
+#     # Anneal after every loop
+#     main.hero_ai.temperature /= 2
+#     main.monster_ai.temperature /= 2
+#     main.hero_ai.entropy_coef /= 2
+#     main.monster_ai.entropy_coef /= 2
+#     main.hero_ai.optimizer.param_groups[0]['lr'] /= 2
+#     main.monster_ai.optimizer.param_groups[0]['lr'] /= 2
+# # After training, test the AI against each other
+# main.hero_training = False
+# main.monster_training = False
+# main.hero_ai.temperature = 0.0001
+# main.monster_ai.temperature = 0.0001
+# main.do_testing_loop(1)
+# main.plot_graphs()
+# main.save_ai_weights()
 # If using Paperspace, weights will be saved to the cloud
 

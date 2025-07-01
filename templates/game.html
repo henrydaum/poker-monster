@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Poker Monster</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 1400px; margin: auto; padding: 20px; }
+        .game-header { text-align: center; margin-bottom: 20px; }
+        .board { display: flex; justify-content: space-around; gap: 20px; }
+        .player-column { width: 40%; }
+        .actions-column { width: 20%; }
+        .zone { background-color: white; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; padding: 15px; }
+        .zone h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .card { background-color: #efefef; padding: 5px 8px; border-radius: 4px; margin: 4px 0; }
+        .stats p { margin: 5px 0; font-weight: bold; }
+        .special-info { text-align: center; font-weight: bold; color: #d9534f; margin: 20px 0; padding: 10px; background-color: #f2dede; border-radius: 4px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="game-header">
+        <h1>Turn {{ info.turn_number }} - Player: {{ info.turn_priority.upper() }}</h1>
+        <p><strong>Game Phase:</strong> {{ info.game_phase }}</p>
+    </div>
+
+    {% if info.special_info %}
+        <div class="special-info">{{ info.special_info }}</div>
+    {% endif %}
+
+    <div class="board">
+        <div class="player-column">
+            <div class="zone stats">
+                <h3>Your Side ({{ info.me.name.upper() }})</h3>
+                <p>Health: {{ info.me.health }} | Power: {{ info.me.power }} | Deck: {{ info.me.deck_size }}</p>
+            </div>
+            <div class="zone">
+                <h3>Hand</h3>
+                {% for card in info.me.hand %}
+                    <div class="card">{{ card.name }}</div>
+                {% else %}
+                    <p>Empty</p>
+                {% endfor %}
+            </div>
+            <div class="zone">
+                <h3>Battlefield</h3>
+                {% for card in info.me.battlefield %}
+                    <div class="card">{{ card.name }} (Health: {{ card.health }})</div>
+                {% else %}
+                    <p>Empty</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="actions-column">
+            <div class="zone">
+                <h3>Available Actions</h3>
+
+                {% for action in actions %}
+                    <form action="{{ url_for('submit_action') }}" method="post" class="action-form">
+                        
+                        <input type="hidden" name="action_id" value="{{ action.id }}">
+                        
+                        <button type="submit">
+                            [{{ action.id }}] {{ action.name }}
+                        </button>
+
+                    </form>
+                {% endfor %}
+            </div>
+        </div>
+
+        <style>
+            /* ... your other styles ... */
+            .action-form { margin-bottom: 8px; }
+            .action-form button {
+                width: 100%;
+                padding: 12px;
+                font-size: 15px;
+                background-color: #007bff;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                text-align: left;
+                cursor: pointer;
+            }
+            .action-form button:hover {
+                background-color: #0056b3;
+            }
+        </style>
+
+        <div class="player-column">
+            <div class="zone stats">
+                <h3>Opponent's Side ({{ info.opp.name.upper() }})</h3>
+                <p>Health: {{ info.opp.health }} | Power: {{ info.opp.power }} | Deck: {{ info.opp.deck_size }}</p>
+                <p>Hand Size: {{ info.opp.hand_size }} | Power Cards: {{ info.opp.power_cards_size }}</p>
+            </div>
+            <div class="zone">
+                <h3>Battlefield</h3>
+                {% for card in info.opp.battlefield %}
+                    <div class="card">{{ card.name }} (Health: {{ card.health }})</div>
+                {% else %}
+                    <p>Empty</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
