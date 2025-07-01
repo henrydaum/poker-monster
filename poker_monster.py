@@ -1903,7 +1903,7 @@ class Network(nn.Module):
     def sample_action(self, gs, training=False):
         # This is the main function that is called from the main loop (outside here) to get an action based on NN inference.
         # Input a gamestate (gs), returns an action_id (an integer).
-        ctx = torch.inference_mode() if self.epochs > 1 else nullcontext()
+        ctx = torch.inference_mode() if (self.epochs > 1 or training==False) else nullcontext()
         # This part turns off gradient calculations, since all of this will be recomputed in train(). Can also use 'with torch.no_grad():'. To speed things up. Also disables dropout.
         with ctx:
             # Get mask + simulated tempos (and save mask for later training)
@@ -2575,8 +2575,8 @@ game_settings = {
     "scale": 40  # Lower values are *less* zoomed in
 }
 
-main = Main(hyperparameters, **game_settings)
-main.load_ai_weights()
+# main = Main(hyperparameters, **game_settings)
+# main.load_ai_weights()
 
 # Training program:
 # for i in range(4):
@@ -2603,10 +2603,10 @@ main.load_ai_weights()
 #     main.hero_ai.entropy_coef /= 2
 #     main.monster_ai.entropy_coef /= 2
 # After training, test the AI against each other
-main.hero_training = False
-main.monster_training = False
-main.hero_ai.temperature = 0.0001
-main.monster_ai.temperature = 0.0001
-main.do_testing_loop(1)
-main.plot_graphs()
-main.save_ai_weights()
+# main.hero_training = False
+# main.monster_training = False
+# main.hero_ai.temperature = 0.0001
+# main.monster_ai.temperature = 0.0001
+# main.do_testing_loop(1)
+# main.plot_graphs()
+# main.save_ai_weights()
