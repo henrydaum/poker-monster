@@ -131,8 +131,6 @@ class Card:
     def __eq__(self, other):
         if not isinstance(other, Card):
             return NotImplemented
-        
-        # Return True if their uids are the same, False otherwise
         return self.uid == other.uid
 
     def effect(self, gs) -> None:
@@ -154,7 +152,7 @@ class Card:
             "health": self.health,
             "starting_health": self.starting_health,
             "card_text": self.card_text,
-            "image_filename": image_filename
+            "image_filename": image_filename  # To display images on the website
         }
         return data
 
@@ -169,7 +167,7 @@ class Card:
             card_type=data["card_type"],
             power_cost=data["power_cost"],
             health=data["health"],
-            card_text=data["card_text"],
+            card_text=data["card_text"]
         )
         card.starting_health = data["starting_health"]
         return card
@@ -2686,6 +2684,9 @@ class Main:
 
 # This contains the hyperparameters I used to train my model, as well as the training schedule I set up.
 
+# !ls /  # Shows that you are connected to Paperspace cloud GPU
+# Sometimes bugs occur from using a remote kernel.
+
 hyperparameters = {
     # Network architecture:
     "lstm_size": 70,
@@ -2714,8 +2715,8 @@ game_settings = {
     "training_hero_type": "computer_ai",
     "training_monster_type": "computer_ai",
     "training_display": False,
-    "hero_training": False,
-    "monster_training": False,
+    "hero_training": True,
+    "monster_training": True,
     # Annealing:
     "anneal_temperature": False,
     "anneal_entropy": False,  # Linearly reduce entropy from entropy_coef to 0 over the course of training
