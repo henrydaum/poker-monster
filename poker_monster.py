@@ -892,12 +892,16 @@ class TargetMonster(Action):
             if self.resolving_card.name == "Cheap Shot" and len(self.gs.me.deck) <= 4:
                 self.gs.tempo -= 1
         if self.resolving_card.name == "Go All In" and self.gs.me.name == "monster":
-            if any(card.name == "The 'Ol Switcheroo" for card in self.gs.me.deck):
-                self.gs.tempo += 1  # It's fine to damage yourself with this card, since you draw 3 cards and can reverse the damage (later) with The 'Ol Switcheroo
+            if any(card.name == "A Pearlescent Dragon" for card in self.gs.opp.battlefield):
+                self.gs.tempo -= 1  # This takes you dangerously low and can kill you
+            elif any(card.name == "The 'Ol Switcheroo" for card in self.gs.me.deck):
+                self.gs.tempo += 0  # It's fine to damage yourself with this card, since you draw 3 cards and can reverse the damage (later) with The 'Ol Switcheroo
             elif any(card.name == "The 'Ol Switcheroo" for card in self.gs.me.hand):
-                self.gs.tempo += 2  # If you already have the other piece of the combo, you get an extra point
+                self.gs.tempo += 1  # If you already have the other piece of the combo, you get an extra point
             else:
                 self.gs.tempo += 0  # You probably shouldn't do this, but drawing 3 cards can be good
+            if self.gs.me.health <= 5 or len(self.gs.me.deck) <= 3:
+                self.gs.tempo -= 1  # This kills you
         elif self.resolving_card.name == "Go All In" and self.gs.me.name == "hero":
             self.gs.tempo += 2  # You should always target the Monster with this card if you have it and you are the Hero, since in almost all situations you won't have The 'Ol Switcheroo
         if self.resolving_card.name == "Fold" and self.gs.me.name == "monster":
@@ -1971,8 +1975,8 @@ class Network(nn.Module):
         super().__init__()
         # Hyperparameters at the top:
         self.input_size = measure_gs() + num_actions-1
-        self.lstm_size = kwargs["lstm_size"]   # Number of hidden neurons in the recurrant neural network's internal layers.
-        self.num_lstm_layers = kwargs["num_lstm_layers"]
+        self.rnn_size = kwargs["rnn_size"]   # Number of hidden neurons in the recurrant neural network's internal layers.
+        self.num_rnn_layers = kwargs["num_rnn_layers"]
         self.feedforward_size = kwargs["feedforward_size"]
         self.dropout_rate = kwargs["dropout_rate"]
         self.long_term_gamma = kwargs["long_term_gamma"]  # Discount factor for long-term reward that only show up at the end of the game, 0.95 seems good, affecting all actions.
@@ -1982,10 +1986,10 @@ class Network(nn.Module):
         self.entropy_coef = kwargs["entropy_coef"]
         self.negative_reward_clamp = kwargs["negative_reward_clamp"]
         # Then network layer architecture:
-        self.lstm = nn.LSTM(self.input_size, self.lstm_size, num_layers=self.num_lstm_layers, dropout=self.dropout_rate)  # This is the Long-Short-Term Memory recurrant neural network. Has complex internal workings.
-        self.ln_lstm = nn.LayerNorm(self.lstm_size)  # Normalize the output of the LSTM
+        self.rnn = nn.GRU(self.input_size, self.rnn_size, num_layers=self.num_rnn_layers, dropout=self.dropout_rate)  # This is the Long-Short-Term Memory recurrant neural network. Has complex internal workings.
+        self.ln_rnn = nn.LayerNorm(self.rnn_size)  # Normalize the output of the LSTM
         self.dropout1 = nn.Dropout(self.dropout_rate)
-        self.fc1 = nn.Linear(self.lstm_size, self.feedforward_size)  # Normal fully-connected feedforward layer.
+        self.fc1 = nn.Linear(self.rnn_size, self.feedforward_size)  # Normal fully-connected feedforward layer.
         self.ln1 = nn.LayerNorm(self.feedforward_size)  # Normalize the layer's outputs/logits (very helpful since Poker Monster has a lot of randomness)
         self.dropout2 = nn.Dropout(self.dropout_rate)
         self.fc2 = nn.Linear(self.feedforward_size, num_actions-1)  # Actor, or policy head
@@ -2000,18 +2004,17 @@ class Network(nn.Module):
         self.num_params = sum(p.numel() for p in self.parameters())  # Total number of parameters (network size)
         self.to(device)
 
-    def forward(self, x, prev_lstm_state):
+    def forward(self, x, prev_rnn_state):
         # Forward pass of the neural network. This produces the main outputs for the network but this is not called directly from main(). Instead, sample_action is called.
-        lstm_output, new_lstm_state = self.lstm(x, prev_lstm_state)  # For LSTM, x shape must be: [seq_length, measure_gs()]. A bit tricky but addressed below before calling forward.
-        x1 = self.dropout1(self.ln_lstm(lstm_output[-1]))  # Apply LayerNorm to LSTM output
+        rnn_output, new_rnn_state = self.rnn(x, prev_rnn_state)  # For LSTM, x shape must be: [seq_length, measure_gs()]. A bit tricky but addressed below before calling forward.
+        x1 = self.dropout1(self.ln_rnn(rnn_output[-1]))  # Apply LayerNorm to LSTM output
         x2 = self.dropout2(torch.relu(self.ln1(self.fc1(x1))) + x1)  # Feedforward layer for ln1 and fc1, with residual
-        return self.fc2(x2), new_lstm_state
+        return self.fc2(x2), new_rnn_state
 
     def reset_memory(self):
-        # Since LSTM requires an existing lstm_state, this initializes one with zeros that is used.
-        h0 = torch.zeros(self.num_lstm_layers, self.lstm_size).to(device)
-        c0 = torch.zeros(self.num_lstm_layers, self.lstm_size).to(device)
-        # Also (re)establish the memory with the lstm_state:
+        # Since LSTM requires an existing rnn_state, this initializes one with zeros that is used.
+        h0 = torch.zeros(self.num_rnn_layers, self.rnn_size).to(device)
+        # Also (re)establish the memory with the rnn_state:
         self.memory = {
                     "gs_vectors": [],
                     "action_ids": [],
@@ -2021,7 +2024,7 @@ class Network(nn.Module):
                     "tempos": [],
                     "entropies": [],
                     "logprobs": [],
-                    "lstm_states": [(h0, c0)],
+                    "rnn_states": [h0],
                 }
 
     def tempo_mask(self, gs):
@@ -2043,7 +2046,7 @@ class Network(nn.Module):
         # Return masked logits
         return mask, tempos  # Save mask for training since making actions is intensive and saving gs is a bad idea
 
-    def sample_action(self, gs, prev_hidden_state=None, training=False):
+    def sample_action(self, gs, prev_rnn_state=None, training=False):
         # This is the main function that is called from the main loop (outside here) to get an action based on NN inference.
         # Input a gamestate (gs), returns an action_id (an integer).
         ctx = torch.inference_mode() if (self.epochs > 1 or training==False) else nullcontext()
@@ -2057,12 +2060,12 @@ class Network(nn.Module):
             x = torch.tensor(gs_vector, dtype=torch.float32).to(device)
             # Concatenate x with possible tempos
             x = torch.cat((x, tempos), dim=0)
-            # Reshape for lstm
+            # Reshape for rnn
             x = x.unsqueeze(0)
-            # Retreive previous lstm_state
-            prev_lstm_state = prev_hidden_state if prev_hidden_state else self.memory["lstm_states"][-1]
+            # Retreive previous rnn_state
+            prev_rnn_state = prev_rnn_state if (prev_rnn_state is not None) else self.memory["rnn_states"][-1]
             # Do forward pass
-            logits, new_lstm_state = self(x, prev_lstm_state)
+            logits, new_rnn_state = self(x, prev_rnn_state)
             # print(f"Action {len(self.memory['action_ids'])-1} sample logits {logits}")
             # if self.name == "hero" and len(self.memory['action_ids']) == 0:
             #     print(f"SAMPLE Action {len(self.memory['action_ids'])} gs_vector = {gs_vector}")
@@ -2091,9 +2094,9 @@ class Network(nn.Module):
                 self.memory["tempos"].append(tempos)
                 self.memory["entropies"].append(entropy)
                 self.memory["logprobs"].append(logprob)
-                self.memory["lstm_states"].append(new_lstm_state)
+                self.memory["rnn_states"].append(new_rnn_state)
 
-            return action_id, new_lstm_state
+            return action_id, new_rnn_state
 
     def train_network(self, baseline, epochs=1):
         # This is the training loop that is called after the game is over, data has been collected, and there is a winner (or tie)
@@ -2151,13 +2154,12 @@ class Network(nn.Module):
         # Vectorized learning:
         if self.epochs > 1:
             for epoch in range(self.epochs):
-                self.memory["lstm_states"] = []
-                # Recomputing ALL lstm forward passes
+                self.memory["rnn_states"] = []
+                # Recomputing ALL rnn forward passes
                 # Remake h0 and c0
-                h0 = torch.zeros(self.num_lstm_layers, self.lstm_size).to(device)
-                c0 = torch.zeros(self.num_lstm_layers, self.lstm_size).to(device)
+                h0 = torch.zeros(self.num_rnn_layers, self.rnn_size).to(device)
                 # Assemble initial hidden state
-                lstm_state = (h0, c0)
+                rnn_state = h0
                 # Intialize logits vector
                 logits = []
                 # Forward pass for every action done again
@@ -2167,8 +2169,8 @@ class Network(nn.Module):
                     tempos_ = tempos[i]
                     # Concatenate with tempos and shape for LSTM
                     x = torch.cat((gs_vector, tempos_), dim=0).unsqueeze(0)
-                    # Forward using (in-place updating) lstm state and gs_vector for every step
-                    logits_, lstm_state = self(x, lstm_state)
+                    # Forward using (in-place updating) rnn state and gs_vector for every step
+                    logits_, rnn_state = self(x, rnn_state)
                     # Add to vector, shape [B, num_actions - 1]
                     logits.append(logits_)
                     # if self.name == "hero" and i == 0:
@@ -2689,25 +2691,25 @@ class Main:
 
 hyperparameters = {
     # Network architecture:
-    "lstm_size": 70,
-    "num_lstm_layers": 3,  # Ignore dropout warning if X=1
-    "feedforward_size": 70,
+    "rnn_size": 64,
+    "num_rnn_layers": 2,  # Ignore dropout warning if X=1
+    "feedforward_size": 64,
     # Reward shaping:
     "long_term_gamma": 0.95,  # Lower values decay the end-of-game reward to earlier turns faster
-    "short_term_gamma": 0.75,
+    "short_term_gamma": 0.7,
     "negative_reward_clamp": float('-inf'),  # Clamp negative rewards to this value to make them less punishing. All rewards below this value are set to this value (set to float('-inf') to disable)
     # Learning rate parameters (LR scheduler):
-    "lr":5e-3,  # For 5 or more epochs, use 1e-4; for 1 epoch use 1e-3 (no scheduler)
+    "lr":1e-3,  # For 5 or more epochs, use 1e-4; for 1 epoch use 1e-3 (no scheduler)
     "use_lr_scheduler": True,  # lr scheduler (cosine annealing)
-    "T_0": 250,  # lr cosine anneal period (repeats every X games with warm restarts)
+    "T_0": 500,  # lr cosine anneal period (repeats every X games with warm restarts)
     "T_mult": 1,  # Multiply T_0 by this factor every time it restarts (default is 1)
-    "eta_min": 5e-6,  # Anneal from lr (above) to this lr
+    "eta_min": 1e-6,  # Anneal from lr (above) to this lr
     # Misc. Parameters:
     "dropout_rate": 0.2,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
     "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights
     "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed
     "temperature": 2,  # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
-    "entropy_coef": 0.02,  # Higher values slow down learning, increase exploration, and slow convergence.
+    "entropy_coef": 0.01,  # Higher values slow down learning, increase exploration, and slow convergence.
 }
 
 game_settings = {

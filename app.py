@@ -33,44 +33,40 @@ hero_ai = Network(name="hero", **hyperparameters)
 monster_ai = Network(name="monster", **hyperparameters)
 hero_ai.to(device)
 monster_ai.to(device)
-try:  # Load monster_ai
-    monster_ai.load("monster")
-except Exception as e:
-    print(f"Could not load monster_ai: {e}")
 try:  # Load hero_ai
     hero_ai.load("hero")
+    # hero_ai = torch.quantization.quantize_dynamic(hero_ai, {torch.nn.GRU, torch.nn.Linear}, dtype=torch.qint8)
 except Exception as e:
     print(f"Could not load hero_ai: {e}")
+try:  # Load monster_ai
+    monster_ai.load("monster")
+    # monster_ai = torch.quantization.quantize_dynamic(monster_ai, {torch.nn.GRU, torch.nn.Linear}, dtype=torch.qint8)
+except Exception as e:
+    print(f"Could not load monster_ai: {e}")
 hero_ai.temperature = 0.0001
 monster_ai.temperature = 0.0001
 
-def serialize_hidden_state(state_tuple):
+def serialize_rnn_state(rnn_state):
     """Converts a PyTorch hidden state tuple into a serializable list tuple."""
-    h_n_tensor, c_n_tensor = state_tuple
-    return (h_n_tensor.tolist(), c_n_tensor.tolist())
+    return rnn_state.tolist()
 
-def deserialize_hidden_state(state_lists):
+def deserialize_rnn_state(state_list):
     """Converts a list tuple from the session back into a PyTorch hidden state."""
-    if not state_lists:
-        return None
-    h_n_list, c_n_list = state_lists
-    h_n_tensor = torch.tensor(h_n_list).to(device)
-    c_n_tensor = torch.tensor(c_n_list).to(device)
-    return (h_n_tensor, c_n_tensor)
+    return torch.tensor(state_list).to(device)
 
-def take_ai_turn(gs, prev_hidden_state):
+def take_ai_turn(gs, prev_rnn_state):
     """Processes the AI's turn, managing its hidden state."""
     # This loop handles cases where the AI might take multiple actions in a row
     while gs.winner is None and gs.me.player_type.startswith("computer_ai"):
         current_ai = hero_ai if gs.me.name == "hero" else monster_ai
         
-        choice_number, new_hidden_state = current_ai.sample_action(gs, prev_hidden_state, training=False)
-        prev_hidden_state = new_hidden_state # Use the new state for the next potential loop
+        choice_number, new_rnn_state = current_ai.sample_action(gs, prev_rnn_state, training=False)
+        prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
 
         action = create_action(gs, choice_number)
         action.enact() # This function modifies gs in place
 
-    return gs, new_hidden_state
+    return gs, new_rnn_state
 
 def get_display_info(gs):
     """Packages all relevant GameState data into a dictionary for the template."""
@@ -105,7 +101,7 @@ def get_display_info(gs):
         "special_info": None # Placeholder for conditional information
     }
 
-    # Conditional info based on game phase
+    # Special Info:
     # Noble Sacrifice discard
     if gs.game_phase == PHASE_DISCARDING_CARD_FROM_OPP_HAND:  
         info["special_info"] = f"Opp hand: {[card.name for card in gs.opp.hand]}"
@@ -204,17 +200,16 @@ def start_game():
     gs.monster.draw(4)
 
     # Initialize a blank hidden state for the AIs
-    h0 = torch.zeros(hyperparameters["num_lstm_layers"], hyperparameters["lstm_size"])
-    c0 = torch.zeros(hyperparameters["num_lstm_layers"], hyperparameters["lstm_size"])
-    hidden_state = (h0, c0)
+    h0 = torch.zeros(hyperparameters["num_rnn_layers"], hyperparameters["rnn_size"])
+    rnn_state = h0
 
     # If the AI goes first, let it take its turn now
     if gs.me.player_type.startswith("computer_ai"):
-        gs, hidden_state = take_ai_turn(gs, hidden_state)
+        gs, rnn_state = take_ai_turn(gs, rnn_state)
 
     # Store the initial game and AI states in the session
     session["gs"] = gs.to_dict()
-    session["hidden_state"] = serialize_hidden_state(hidden_state)
+    session["rnn_state"] = serialize_rnn_state(rnn_state)
     
     return redirect(url_for("game"))
 
@@ -242,7 +237,7 @@ def submit_action():
     
     # Load state from session
     gs = GameState.from_dict(session["gs"])
-    hidden_state = deserialize_hidden_state(session.get("hidden_state"))
+    rnn_state = deserialize_rnn_state(session.get("rnn_state"))
 
     # Get action_id from the form submission
     action_id = int(request.form["action_id"])
@@ -251,14 +246,11 @@ def submit_action():
     # Execute the user's action
     action = create_action(gs, action_id)
     legal, reason = action.is_legal()
-    if legal:
-        action.enact() # This updates gs
-    else:
-        session["error"] = reason
+    action.enact() # This updates gs
 
     # If the game isn't over, let the AI take its turn
     if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
-        gs, hidden_state = take_ai_turn(gs, hidden_state)
+        gs, rnn_state = take_ai_turn(gs, rnn_state)
 
     if gs.winner:
         # If there's a winner, store it in the session and redirect to the main page
@@ -267,7 +259,7 @@ def submit_action():
     else:
         # If no winner, save the updated state and redirect back to the game board
         session["gs"] = gs.to_dict()
-        session["hidden_state"] = serialize_hidden_state(hidden_state)
+        session["rnn_state"] = serialize_rnn_state(rnn_state)
         return redirect(url_for("game"))
 
 if __name__ == "__main__":
