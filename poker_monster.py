@@ -331,6 +331,7 @@ class Player:
         self.power = 0  # Used to play cards face up, gained from playing cards face down.
         self.power_plays_left = 1
         self.power_plays_made_this_turn = 0
+        self.last_turn_log = []  # For displaying to the opponent, so they can understand what you did last turn
         self.last_stand_buff = False
         self.monsters_pawn_buff = False
         self.going_first = False
@@ -338,6 +339,7 @@ class Player:
         self.action_number = 0
 
     def start_turn(self, gs):
+        self.last_turn_log = []
         self.power_plays_left = 1
         self.power_plays_made_this_turn = 0
         self.power += len(self.power_cards)
@@ -381,7 +383,8 @@ class Player:
         self.graveyard.append(card)
 
     # Playing a card face down
-    def play_power_card(self, gs, card):  
+    def play_power_card(self, gs, card):
+        self.last_turn_log.append("Played a power card")
         self.hand.remove(card)
         self.power_cards.append(card)
         self.power_plays_left -= 1
@@ -401,6 +404,7 @@ class Player:
 
     # Playing a card face up, either long or short.
     def play_face_up(self, gs, card, no_effect=False):
+        self.last_turn_log.append(f"Played {card.name}")
         # Pass no_effect to play_short_card (and not play_long_card) since only short cards have effects when you play them
         #print("no more info needed")
         #print("playing card face up: " + card.name)
@@ -430,6 +434,7 @@ class Player:
             "power": self.power,
             "power_plays_left": self.power_plays_left,
             "power_plays_made_this_turn": self.power_plays_made_this_turn,
+            "last_turn_log": self.last_turn_log,
             "last_stand_buff": self.last_stand_buff,
             "monsters_pawn_buff": self.monsters_pawn_buff,
             "going_first": self.going_first,
@@ -454,11 +459,12 @@ class Player:
         player.power = data["power"]
         player.power_plays_left = data["power_plays_left"]
         player.power_plays_made_this_turn = data["power_plays_made_this_turn"]
+        player.last_turn_log = data["last_turn_log"]
         player.last_stand_buff = data["last_stand_buff"]
         player.monsters_pawn_buff = data["monsters_pawn_buff"]
         player.going_first = data["going_first"]
         player.player_type = data["player_type"]
-        player.action_number = data ["action_number"]
+        player.last_turn_log = data.get("last_turn_log", [])
 
         # Rebuild the card lists using Card.from_dict()
         player.hand = [Card.from_dict(card_data) for card_data in data["hand"]]

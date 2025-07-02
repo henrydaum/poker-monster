@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Poker Monster</title>
     <style>
         body { font-family: sans-serif; background-color: #f4f4f4; color: #333; }
@@ -64,6 +65,24 @@
         #card-image-viewer img {
             display: block;
             width: 250px; /* Or whatever width looks best for your images */
+        }
+        /* This rule applies only when the screen is 992px wide or less */
+        @media (max-width: 992px) {
+            .board {
+                flex-direction: column; /* Stacks the columns vertically */
+            }
+
+            .player-column,
+            .actions-column {
+                width: 100%; /* Makes each column take the full width */
+            }
+        }
+
+        /* This rule applies only when the screen is very narrow (600px or less) */
+        @media (max-width: 600px) {
+            .zone-grid {
+                grid-template-columns: 1fr; /* Stacks the 4 zones into a single column */
+            }
         }
     </style>
 </head>
@@ -149,6 +168,13 @@
                             </button>
 
                         </form>
+                    {% endfor %}
+                </div> <div class="zone">
+                    <h3>Enemy Actions</h3>
+                    {% for log_entry in info.opp.last_turn_log %}
+                        <div class="log-item">{{ loop.index }}. {{ log_entry }}</div>
+                    {% else %}
+                        <p>No actions taken yet.</p>
                     {% endfor %}
                 </div>
             </div>

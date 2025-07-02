@@ -95,10 +95,11 @@ def get_display_info(gs):
             "hand_size": len(gs.opp.hand),
             "power_cards_size": len(gs.opp.power_cards),
             "battlefield": [c.to_dict() for c in gs.opp.battlefield],
-            "graveyard": [c.to_dict() for c in gs.opp.graveyard]
+            "graveyard": [c.to_dict() for c in gs.opp.graveyard],
+            "last_turn_log": gs.opp.last_turn_log
         },
         "cache": [c.to_dict() for c in gs.cache],
-        "special_info": None # Placeholder for conditional information
+        "special_info": None, # Placeholder for conditional information
     }
 
     # Special Info:
@@ -251,6 +252,7 @@ def submit_action():
     # If the game isn't over, let the AI take its turn
     if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
         gs, rnn_state = take_ai_turn(gs, rnn_state)
+    print(gs.opp.last_turn_log)
 
     if gs.winner:
         # If there's a winner, store it in the session and redirect to the main page
