@@ -2714,8 +2714,8 @@ game_settings = {
     "training_hero_type": "computer_ai",
     "training_monster_type": "computer_ai",
     "training_display": False,
-    "hero_training": True,
-    "monster_training": True,
+    "hero_training": False,
+    "monster_training": False,
     # Annealing:
     "anneal_temperature": False,
     "anneal_entropy": False,  # Linearly reduce entropy from entropy_coef to 0 over the course of training
@@ -2731,44 +2731,3 @@ game_settings = {
     "game_mode": 0,
     "scale": 50  # Lower values are *less* zoomed in
 }
-
-# main = Main(hyperparameters, **game_settings)
-# # main.load_ai_weights()
-
-# # Training program:
-# for i in range(5):
-#     print(f"\nRound {i+1}, FIGHT!")
-#     # Pretrain Monster on random Hero
-#     main.training_hero_type = "computer_random"
-#     main.training_monster_type = "computer_ai"
-#     main.train_on_wins("monster", 250)
-#     # Pretrain Hero on random Monster
-#     main.training_hero_type = "computer_ai"
-#     main.training_monster_type = "computer_random"
-#     main.train_on_wins("hero", 250)
-#     # Train Hero and Monster on a pool of their past opponents
-#     main.training_hero_type = "computer_ai"
-#     main.training_monster_type = "computer_ai"
-#     # main.anneal_temperature = True
-#     # main.anneal_entropy = True
-#     main.train_on_population(500)
-#     # Turn off annealing
-#     # main.anneal_temperature = False
-#     # main.anneal_entropy = False
-#     # Anneal after every loop
-#     main.hero_ai.temperature /= 2
-#     main.monster_ai.temperature /= 2
-#     main.hero_ai.entropy_coef /= 2
-#     main.monster_ai.entropy_coef /= 2
-#     main.hero_ai.optimizer.param_groups[0]['lr'] /= 2
-#     main.monster_ai.optimizer.param_groups[0]['lr'] /= 2
-# # After training, test the AI against each other
-# main.hero_training = False
-# main.monster_training = False
-# main.hero_ai.temperature = 0.0001
-# main.monster_ai.temperature = 0.0001
-# main.do_testing_loop(1)
-# main.plot_graphs()
-# main.save_ai_weights()
-# If using Paperspace, weights will be saved to the cloud
-
