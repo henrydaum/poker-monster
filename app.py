@@ -107,24 +107,24 @@ def get_display_info(gs):
     if gs.game_phase == PHASE_DISCARDING_CARD_FROM_OPP_HAND:  
         info["special_info"] = f"Opp hand: {[card.name for card in gs.opp.hand]}"
     # Peek top2 reveal
-    if gs.game_phase == "choosing from Peek":
+    elif gs.game_phase == PHASE_CHOOSING_FROM_DECK_TOP2:
         top2 = gs.me.deck[:2]
         info["special_info"] = f"My deck top 2 cards: {[card.name for card in top2]}"
     # Ultimatum deck reveal
-    if gs.game_phase == PHASE_CHOOSING_ULTIMATUM_CARD:
+    elif gs.game_phase == PHASE_CHOOSING_ULTIMATUM_CARD:
         info["special_info"] = f"My deck: {[card.name for card in gs.me.deck]}"
     # Ultimatum ultimatum
-    if gs.game_phase == PHASE_OPP_CHOOSING_FROM_ULTIMATUM:
+    elif gs.game_phase == PHASE_OPP_CHOOSING_FROM_ULTIMATUM:
         info["special_info"] = f"Opp Ultimatum: {[card.name for card in gs.cache[1:3]]}"
     # Reconsider reveal
-    if gs.game_phase == PHASE_REORDERING_DECK_TOP3:
+    elif gs.game_phase == PHASE_REORDERING_DECK_TOP3:
         top3 = gs.me.deck[:3]
         info["special_info"] = f"My deck top 3 cards: {[card.name for card in top3]}"
     # Viewing card info
-    if gs.game_phase == PHASE_VIEWING_CARD_INFO:
+    elif gs.game_phase == PHASE_VIEWING_CARD_INFO:
         info["special_info"] = f"{gs.cache[0].name}: {gs.cache[0].card_text} (Power Cost: {gs.cache[0].power_cost})"
     # To show who is going first
-    if gs.me.action_number == 0:
+    elif my_turn_number == 1:
         info["special_info"] = "You are going first" if gs.me.going_first else "You are going second"
 
     return info
