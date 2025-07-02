@@ -34,15 +34,6 @@ monster_ai = Network(name="monster", **hyperparameters)
 hero_ai.to(device)
 monster_ai.to(device)
 
-try:
-    hero_ai.load("hero")
-except Exception as e:
-    print(f"Could not load hero_ai: {e}")
-try:
-    monster_ai.load("monster")
-except Exception as e:
-    print(f"Could not load monster_ai: {e}")
-
 def serialize_hidden_state(state_tuple):
     """Converts a PyTorch hidden state tuple into a serializable list tuple."""
     h_n_tensor, c_n_tensor = state_tuple
@@ -180,8 +171,16 @@ def start_game():
 
     if user_role == 'hero':
         hero_player_type, monster_player_type = "person", "computer_ai"
+        try:  # Load monster_ai
+            monster_ai.load("monster")
+        except Exception as e:
+            print(f"Could not load monster_ai: {e}")
     elif user_role == 'monster':
         hero_player_type, monster_player_type = "computer_ai", "person"
+        try:  # Load hero_ai
+            hero_ai.load("hero")
+        except Exception as e:
+            print(f"Could not load hero_ai: {e}")
     else:
         return redirect(url_for("choice_screen"))
     
