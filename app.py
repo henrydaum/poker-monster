@@ -1,5 +1,6 @@
 from flask import Flask, render_template, redirect, url_for, session, request
 from flask_session import Session
+from datetime import timedelta
 import torch
 import random
 from poker_monster import (
@@ -9,7 +10,11 @@ from poker_monster import (
     PHASE_SELECTING_GRAVEYARD_CARD, PHASE_REORDERING_DECK_TOP3, PHASE_DISCARDING_CARD_FROM_OPP_HAND,
     PHASE_CHOOSING_GO_ALL_IN_TARGET, PHASE_CHOOSING_FOLD_TARGET, PHASE_CHOOSING_POKER_FACE_TARGET,
     PHASE_CHOOSING_CHEAP_SHOT_TARGET, PHASE_CHOOSING_ULTIMATUM_CARD, PHASE_OPP_CHOOSING_FROM_ULTIMATUM,
-    PHASE_CHOOSING_FROM_DECK_TOP2, PHASE_HAND_FULL_DISCARDING_CARD
+    PHASE_CHOOSING_FROM_DECK_TOP2, PHASE_HAND_FULL_DISCARDING_CARD,
+    ERROR_ENEMY_HAS_THE_SUN, ERROR_ENEMY_HAS_THE_MOON, ERROR_INVALID_SELECTION,
+    ERROR_CANT_PLAY_ANOTHER_POWER_CARD, ERROR_NOT_ENOUGH_POWER, ERROR_NO_SACRIFICE,
+    ERROR_MUST_PICK_DIFFERENT_CARD, ERROR_MUST_HAVE_DIFFERENT_NAME, ERROR_NO_FURTHER_MOVES,
+    ERROR_COMPUTERS_CANT_DO, ERROR_ACTION_WITHELD_FROM_AI
 )
 
 app = Flask(__name__)
@@ -19,6 +24,8 @@ app.secret_key = 'a_very_secret_key'
 # This uses Flask Session to run the cookie on the server side (the gamestate + hidden state is too large for browser)
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_PERMANENT"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=2)
 Session(app)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -66,10 +73,15 @@ def take_ai_turn(gs, prev_hidden_state):
 
 def get_display_info(gs):
     """Packages all relevant GameState data into a dictionary for the template."""
+
+    if gs.me.going_first:
+        my_turn_number = gs.turn_number / 2 + 1
+    else:
+        my_turn_number = (gs.turn_number + 1) / 2
     
     # Base player information
     info = {
-        "turn_number": gs.turn_number,
+        "turn_number": int(my_turn_number),
         "turn_priority": gs.turn_priority,
         "game_phase": gs.game_phase,
         "me": {
@@ -88,28 +100,71 @@ def get_display_info(gs):
             "battlefield": [c.to_dict() for c in gs.opp.battlefield],
             "graveyard": [c.to_dict() for c in gs.opp.graveyard]
         },
+        "cache": [c.to_dict() for c in gs.cache],
         "special_info": None # Placeholder for conditional information
     }
 
-    # Add conditional info based on game phase, mimicking your display_info function
+    # Conditional info based on game phase
+    # Noble Sacrifice discard
+    if gs.game_phase == PHASE_DISCARDING_CARD_FROM_OPP_HAND:  
+        info["special_info"] = f"Opp hand: {[card.name for card in gs.opp.hand]}"
+    # Peek top2 reveal
+    if gs.game_phase == "choosing from Peek":
+        top2 = gs.me.deck[:2]
+        info["special_info"] = f"My deck top 2 cards: {[card.name for card in top2]}"
+    # Ultimatum deck reveal
+    if gs.game_phase == PHASE_CHOOSING_ULTIMATUM_CARD:
+        info["special_info"] = f"My deck: {[card.name for card in gs.me.deck]}"
+    # Ultimatum ultimatum
+    if gs.game_phase == PHASE_OPP_CHOOSING_FROM_ULTIMATUM:
+        info["special_info"] = f"Opp Ultimatum: {[card.name for card in gs.cache[1:3]]}"
+    # Reconsider reveal
     if gs.game_phase == PHASE_REORDERING_DECK_TOP3:
-        top_cards = [c.to_dict() for c in gs.me.deck[:3]]
-        info['special_info'] = f"Reordering Top 3 Cards: {', '.join([c['name'] for c in top_cards])}"
-
-    # Add more 'if' statements here for other phases like Peek, Ultimatum, etc.
+        top3 = gs.me.deck[:3]
+        info["special_info"] = f"My deck top 3 cards: {[card.name for card in top3]}"
+    # Viewing card info
+    if gs.game_phase == PHASE_VIEWING_CARD_INFO:
+        info["special_info"] = f"{gs.cache[0].name}: {gs.cache[0].card_text} (Power Cost: {gs.cache[0].power_cost})"
+    # To show who is going first
+    if gs.me.action_number == 0:
+        info["special_info"] = "You are going first" if gs.me.going_first else "You are going second"
 
     return info
 
 def get_available_actions(gs):
     actions = []
-    # FIX: Increased range to cover all potential actions
-    for i in range(num_actions):
-        action = create_action(gs, i)
-        if action.is_legal()[0]:
-            action_name = type(action).__name__
-            if hasattr(action, 'resolving_card') and action.resolving_card:
-                action_name += f": {action.resolving_card.name}"
-            actions.append({"id": i, "name": action_name})
+    for action_id in range(num_actions):  # Assuming 20 possible actions
+        # print("Creating action: ", action_id)
+        action = create_action(gs, action_id)
+        legal, error = action.is_legal()
+
+        if legal:
+            extra_info = ""
+            action_name = type(action).__name__  # Get the class name
+            if action_name in "SelectFromHand":
+                extra_info = f": {action.resolving_card.name}" if action.card_list else ""
+            if action_name == "SelectFromBattlefield":
+                extra_info = f": {action.target.name}" if action.card_list else ""
+            if action_name == "SelectFromOwnBattlefield":
+                extra_info = f": {action.sacrifice.name}" if action.card_list else ""
+            if action_name == "SelectFromOppHand":
+                extra_info = f": {action.discard.name}" if action.card_list else ""
+            if action_name == "SelectFromDeckTop2":
+                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+            if action_name == "SelectFromGraveyard":
+                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+            if action_name == "SelectFromDeck":
+                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+            if action_name == "SelectFromUltimatum":
+                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+            if action_name == "SelectFromDeckTop3":
+                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+            total_string = action_name + " " + extra_info
+            actions.append({"id": action_id, "name": total_string})
+        elif error != ERROR_INVALID_SELECTION:  # QOL, error invalid shows up too often and don't need to see it
+            total_string = "(Invalid) - " + error
+            actions.append({"id": action_id, "name": total_string})
+    
     return actions
 
 @app.route("/")

@@ -70,7 +70,7 @@ PHASE_CHOOSING_FOLD_TARGET = "Choosing Fold target."
 PHASE_CHOOSING_POKER_FACE_TARGET = "Choosing Poker Face target."
 PHASE_CHOOSING_CHEAP_SHOT_TARGET = "Choosing Cheap Shot target."
 PHASE_CHOOSING_ULTIMATUM_CARD = "Choosing an Ultimatum card from deck."
-PHASE_OPP_CHOOSING_FROM_ULTIMATUM = "Opponent choosing from Ultimatum."
+PHASE_OPP_CHOOSING_FROM_ULTIMATUM = "Choosing from Ultimatum. Chosen card goes into opp hand, other is shuffled into their deck."
 PHASE_CHOOSING_FROM_DECK_TOP2 = "Choosing from Peek."
 PHASE_HAND_FULL_DISCARDING_CARD = "Hand full, discarding card."
 
@@ -142,6 +142,8 @@ class Card:
 
     def to_dict(self):
         # Encode Card into a dictionary that HTML can use
+        image_filename = f"images/{self.name.replace(' ', '_')}.png"
+
         data = {
             "name": self.name,
             "card_id": self.card_id,
@@ -152,6 +154,7 @@ class Card:
             "health": self.health,
             "starting_health": self.starting_health,
             "card_text": self.card_text,
+            "image_filename": image_filename
         }
         return data
 
@@ -166,7 +169,7 @@ class Card:
             card_type=data["card_type"],
             power_cost=data["power_cost"],
             health=data["health"],
-            card_text=data["card_text"]
+            card_text=data["card_text"],
         )
         card.starting_health = data["starting_health"]
         return card

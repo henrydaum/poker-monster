@@ -8,103 +8,232 @@
         .container { max-width: 1400px; margin: auto; padding: 20px; }
         .game-header { text-align: center; margin-bottom: 20px; }
         .board { display: flex; justify-content: space-around; gap: 20px; }
-        .player-column { width: 40%; }
-        .actions-column { width: 20%; }
+        .player-column { width: 35%; }
+        .actions-column { width: 30%; }
         .zone { background-color: white; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; padding: 15px; }
         .zone h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; }
         .card { background-color: #efefef; padding: 5px 8px; border-radius: 4px; margin: 4px 0; }
         .stats p { margin: 5px 0; font-weight: bold; }
-        .special-info { text-align: center; font-weight: bold; color: #d9534f; margin: 20px 0; padding: 10px; background-color: #f2dede; border-radius: 4px; }
+        .special-info { text-align: center; font-weight: bold; color: #d94f4f; margin: 20px 0; padding: 10px; background-color: #f2dede; border-radius: 4px; }
+        .action-form { margin-bottom: 8px; }
+        .action-form button {
+            width: 100%;
+            padding: 12px;
+            font-size: 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            text-align: left;
+            cursor: pointer;
+        }
+        .action-form button:hover {
+            background-color: #0056b3;
+        }
+        .zone-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* Creates two equal-width columns */
+            gap: 15px; /* Sets the space between the zones */
+        }
+        .restart-button {
+            display: block; /* Makes it take its own line */
+            width: fit-content; /* Makes the button only as wide as its content */
+            margin-left: auto; /* Pushes the button to the right */
+            margin-top: 20px; /* Adds some space above it */
+            padding: 10px 18px;
+            font-size: 16px;
+            text-decoration: none;
+            color: white;
+            background-color: #dc3545;
+            border-radius: 5px;
+        }
+        .restart-button:hover {
+            background-color: #c82333;
+        }
+        #card-image-viewer {
+            position: fixed; /* Floats on top of the page */
+            display: none;   /* Hidden by default */
+            padding: 5px;
+            background: #fff;
+            border: 2px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 1000; /* Stays on top of everything */
+            pointer-events: none; /* Prevents the image from flickering under the mouse */
+        }
+        #card-image-viewer img {
+            display: block;
+            width: 250px; /* Or whatever width looks best for your images */
+        }
     </style>
 </head>
 <body>
-<div class="container">
-    <div class="game-header">
-        <h1>Turn {{ info.turn_number }} - Player: {{ info.turn_priority.upper() }}</h1>
-        <p><strong>Game Phase:</strong> {{ info.game_phase }}</p>
+    <div id="card-image-viewer">
+        <img src="" alt="Card Art">
     </div>
 
-    {% if info.special_info %}
-        <div class="special-info">{{ info.special_info }}</div>
-    {% endif %}
-
-    <div class="board">
-        <div class="player-column">
-            <div class="zone stats">
-                <h3>Your Side ({{ info.me.name.upper() }})</h3>
-                <p>Health: {{ info.me.health }} | Power: {{ info.me.power }} | Deck: {{ info.me.deck_size }}</p>
-            </div>
-            <div class="zone">
-                <h3>Hand</h3>
-                {% for card in info.me.hand %}
-                    <div class="card">{{ card.name }}</div>
-                {% else %}
-                    <p>Empty</p>
-                {% endfor %}
-            </div>
-            <div class="zone">
-                <h3>Battlefield</h3>
-                {% for card in info.me.battlefield %}
-                    <div class="card">{{ card.name }} (Health: {{ card.health }})</div>
-                {% else %}
-                    <p>Empty</p>
-                {% endfor %}
-            </div>
+    <div class="container">
+        <div class="game-header">
+            <h1>Turn {{ info.turn_number }} - Player: {{ info.turn_priority.upper() }}</h1>
+            <p>
+                <strong>Game Phase:</strong> {{ info.game_phase }}
+                {% if info.cache %}
+                    <strong>Cache:</strong> 
+                    [
+                    {% for card in info.cache %}
+                        {{ card.name }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                    ]
+                {% endif %}
+            <p>
         </div>
 
-        <div class="actions-column">
-            <div class="zone">
-                <h3>Available Actions</h3>
+        {% if info.special_info %}
+            <div class="special-info">{{ info.special_info }}</div>
+        {% endif %}
 
-                {% for action in actions %}
-                    <form action="{{ url_for('submit_action') }}" method="post" class="action-form">
-                        
-                        <input type="hidden" name="action_id" value="{{ action.id }}">
-                        
-                        <button type="submit">
-                            [{{ action.id }}] {{ action.name }}
-                        </button>
+        <div class="board">
+            <div class="player-column">
+                <div class="zone stats">
+                    <h3>Your Side ({{ info.me.name.upper() }})</h3>
+                    <p>Health: {{ info.me.health }} | Power: {{ info.me.power }} | Deck: {{ info.me.deck_size }}</p>
+                </div>
+                <div class="zone-grid">
+                    <div class="zone">
+                        <h3>Hand</h3>
+                        {% for card in info.me.hand %}
+                            <div class="card" data-image="{{ url_for('static', filename=card.image_filename) }}">
+                                {{ card.name }}
+                            </div>
+                        {% else %}<p>Empty</p>{% endfor %}
+                    </div>
+                    <div class="zone">
+                        <h3>Battlefield</h3>
+                        {% for card in info.me.battlefield %}
+                            <div class="card" data-image="{{ url_for('static', filename=card.image_filename) }}">
+                                {{ card.name }} (Health: {{ card.health }})
+                        </div>
+                        {% else %}<p>Empty</p>{% endfor %}
+                    </div>
+                    <div class="zone">
+                        <h3>Graveyard</h3>
+                        {% for card in info.me.graveyard %}
+                            <div class="card" data-image="{{ url_for('static', filename=card.image_filename) }}">
+                                {{ card.name }}
+                            </div>
+                        {% else %}<p>Empty</p>{% endfor %}
+                    </div>
+                    <div class="zone">
+                        <h3>Power Cards</h3>
+                        {% for card in info.me.power_cards %}
+                            <div class="card" data-image="{{ url_for('static', filename=card.image_filename) }}">
+                                {{ card.name }}
+                            </div>
+                        {% else %}<p>Empty</p>{% endfor %}
+                    </div>
 
-                    </form>
-                {% endfor %}
+                </div>
             </div>
-        </div>
 
-        <style>
-            /* ... your other styles ... */
-            .action-form { margin-bottom: 8px; }
-            .action-form button {
-                width: 100%;
-                padding: 12px;
-                font-size: 15px;
-                background-color: #007bff;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                text-align: left;
-                cursor: pointer;
-            }
-            .action-form button:hover {
-                background-color: #0056b3;
-            }
-        </style>
+            <div class="actions-column">
+                <div class="zone">
+                    <h3>Available Actions</h3>
 
-        <div class="player-column">
-            <div class="zone stats">
-                <h3>Opponent's Side ({{ info.opp.name.upper() }})</h3>
-                <p>Health: {{ info.opp.health }} | Power: {{ info.opp.power }} | Deck: {{ info.opp.deck_size }}</p>
-                <p>Hand Size: {{ info.opp.hand_size }} | Power Cards: {{ info.opp.power_cards_size }}</p>
+                    {% for action in actions %}
+                        <form action="{{ url_for('submit_action') }}" method="post" class="action-form">
+                            
+                            <input type="hidden" name="action_id" value="{{ action.id }}">
+                            
+                            <button type="submit">
+                                {{ action.name }}
+                            </button>
+
+                        </form>
+                    {% endfor %}
+                </div>
             </div>
-            <div class="zone">
-                <h3>Battlefield</h3>
-                {% for card in info.opp.battlefield %}
-                    <div class="card">{{ card.name }} (Health: {{ card.health }})</div>
-                {% else %}
-                    <p>Empty</p>
-                {% endfor %}
+
+            <div class="player-column">
+                <div class="zone stats">
+                    <h3>Opponent's Side ({{ info.opp.name.upper() }})</h3>
+                    <p>Health: {{ info.opp.health }} | Power: {{ info.opp.power }} | Deck: {{ info.opp.deck_size }}</p>
+                    <p>Hand Size: {{ info.opp.hand_size }} | Power Cards: {{ info.opp.power_cards_size }}</p>
+                </div>
+                <div class="zone">
+                    <h3>Battlefield</h3>
+                    {% for card in info.opp.battlefield %}
+                        <div class="card" data-image="{{ url_for('static', filename=card.image_filename) }}">
+                            {{ card.name }} (Health: {{ card.health }})
+                        </div>
+                    {% else %}<p>Empty</p>{% endfor %}
+                </div> <div class="zone">
+                    <h3>Graveyard</h3>
+                    {% for card in info.opp.graveyard %}
+                        <div class="card" data-image="{{ url_for('static', filename=card.image_filename) }}">
+                            {{ card.name }}
+                        </div>
+                    {% else %}<p>Empty</p>{% endfor %}
+                </div>
+
+                <a href="{{ url_for('choice_screen') }}" class="restart-button">Restart Game</a>
             </div>
         </div>
     </div>
-</div>
+<script>
+    const cardElements = document.querySelectorAll('.card');
+    const viewer = document.getElementById('card-image-viewer');
+    const viewerImg = viewer.querySelector('img');
+
+    // This function will check boundaries and position the viewer.
+    // We put it in a function so we can call it from different events.
+    function positionViewer(e) {
+        const viewerWidth = viewer.offsetWidth;
+        const viewerHeight = viewer.offsetHeight;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        let top = e.pageY + 15;
+        let left = e.pageX + 15;
+
+        if (left + viewerWidth > windowWidth) {
+            left = e.pageX - viewerWidth - 15;
+        }
+
+        if (top + viewerHeight > windowHeight) {
+            top = e.pageY - viewerHeight - 15;
+        }
+        
+        viewer.style.left = left + 'px';
+        viewer.style.top = top + 'px';
+    }
+
+    cardElements.forEach(card => {
+        card.addEventListener('mouseover', () => {
+            // When the mouse enters, just set the image source.
+            // The 'load' event below will handle showing it.
+            const imageUrl = card.dataset.image;
+            if (imageUrl) {
+                viewerImg.src = imageUrl;
+            }
+        });
+
+        card.addEventListener('mouseout', () => {
+            // When the mouse leaves, hide the viewer.
+            viewer.style.display = 'none';
+        });
+
+        card.addEventListener('mousemove', (e) => {
+            // As the mouse moves, continuously update the position.
+            positionViewer(e);
+        });
+    });
+
+    // THE KEY FIX: Add an event listener to the <img> tag itself.
+    viewerImg.addEventListener('load', () => {
+        // This function ONLY runs AFTER the new image is fully loaded.
+        // Now its dimensions are correct, so it's safe to make it visible.
+        viewer.style.display = 'block';
+    });
+</script>
 </body>
 </html>
