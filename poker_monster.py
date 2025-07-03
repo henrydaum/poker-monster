@@ -231,7 +231,8 @@ class NobleSacrifice(Card):
         #print("Playing Noble Sacrifice")
         sacrifice = gs.cache[1]
         discard = gs.cache[2]  # Can play when opp has no cards in hand, need to code this
-        sacrifice.health -= 10
+        gs.me.battlefield.remove(sacrifice)
+        gs.me.graveyard.append(sacrifice)
         if discard:  # If discard exists, discard it.
             gs.opp.discard(discard)
 
