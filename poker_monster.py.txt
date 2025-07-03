@@ -1,13 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# # Poker Monster
-# by Henry Daum
-# 
-# This is the game engine and deep reinforcement learning AI for my card game Poker Monster.
-# 
-# (The following code cell initializes some basic variables)
-
 """In order to implement more cards, here is what's needed:
 Some cards create rule changes that can be done in the is_legal method of the action class.
 Some cards specifically target the hero or monster, which can be done in the action class.
@@ -105,15 +95,6 @@ ERROR_COMPUTERS_CANT_DO = "Computers can't do this action."  # Canceling and see
 ERROR_ACTION_WITHELD_FROM_AI = "This action is witheld from AIs since it would harm their strategy"  # These are like automatic reflexes for the AI - things not to do that would harm 
 
 num_actions = num_cards + 2  # +2 for end turn and cancel, computers can't cancel so for them it's num_cards + 1
-
-
-# ## The Card Class
-# 
-# The Card Class is the first of the four major classes for the game engine code: Card, Player, GameState, and Action. Since this is a turn-based game, the interactions are very cyclical, iterative, and recursive. Because of this, the code was very tricky to make, as any small mistake becomes amplified with every following turn. However, it now has (I think) no bugs (but you never know... bugs are pesky).
-# 
-# Anyway, the Card Class is in charge of being a sort of storage container for card information, like the card's name (For example, "Noble Sacrifice"), card_id (there are 40 cards in the game), unique id, or uid (there are 18 non-duplicate cards), card type (short or long), and so on.
-# 
-# There are also different Card subclasses for each of the different unique cards. These subclasses make changes to the GameState based on what the card does (for example, Power Trip gives you 2 power), and are called on by the Action class. The actual function that does this is the effect() function, which is different for every card since they have different effects.
 
 class Card:
     def __init__(self, name, card_id, uid, owner, card_type, power_cost, health, card_text):
@@ -301,24 +282,6 @@ class Peek(Card):
         gs.me.deck.append(deck_top2[0])  # Put the other card on the bottom.
         # Don't forget to get the index!
 
-
-# ## The Player Class
-# 
-# The Player Class is of two kinds: Hero and Monster. These are the two players, and the player types can be a computer that does random moves, a computer AI that is trained with reinforcement learning (a much tougher opponent), and a person controlled by a real human being. You can match any of these player types against each other.
-# 
-# Each player has several 'zones':
-# 1. Their deck - the cards they draw from over the course of the game and get their starting hand from
-# 2. Their hand - the cards they are able to play (face-up or face-down)
-# 3. Their battlefield - cards they played which have persistent value
-# 4. Their graveyard - cards from the battlefield which have died, or cards they played from their hand that are discarded directly after use
-# 5. Their power cards - cards they played in order to get power, which is used to play face-up cards
-# 
-# All of these zones are populated with various cards (from the Card class), that change throughout the game based on various actions.
-# 
-# The Player Class also keeps track of some slightly less important information, like various buffs, who is going first, their power levels, health, and so on.
-# 
-# The Player Class has various functions that are called on from the Action class with certain actions. That's what all the functions are for.
-
 class Player:
     def __init__(self, name, deck, player_type="computer"):
         # Initializes a player with a name and a deck of cards.
@@ -441,7 +404,7 @@ class Player:
             "going_first": self.going_first,
             "player_type": self.player_type,
             "action_number": self.action_number,
-
+            
             # Create a list of nested card dictionaries for each card zone
             "hand": [card.to_dict() for card in self.hand],
             "deck": [card.to_dict() for card in self.deck],
@@ -454,7 +417,7 @@ class Player:
     def from_dict(cls, data):
         # Create a new Player instance. Note the empty deck for now.
         player = cls(name=data['name'], deck=[], player_type=data['player_type'])
-
+        
         # Set the simple attributes
         player.health = data["health"]
         player.power = data["power"]
@@ -473,19 +436,8 @@ class Player:
         player.battlefield = [Card.from_dict(card_data) for card_data in data["battlefield"]]
         player.graveyard = [Card.from_dict(card_data) for card_data in data["graveyard"]]
         player.power_cards = [Card.from_dict(card_data) for card_data in data["power_cards"]]
-
+        
         return player
-
-
-# ## The GameState Class
-# 
-# The GameState class contains all of the game data, including Hero and Monster and their everything (hands, decks, graveyards, power_cards, etc.). The GameState also keeps track of the game_phase and cache, which are needed to execute multi-step actions/cards. The GameState also checks for the winner, manages turn priority, checks for deaths on the battlefield, and is the ultimate source of feedback for the AI. Feedback is the only part of the AI code that you can't just grab off the shelf, but actually need to design with a bit of game understanding. There are four sources of feedback: 
-# 1. Tempo - adressed in the Action class
-# 2. Killer combos - rewards for making cool plays using the cards Awakening and The 'OL Switcheroo
-# 3. Long card value - rewards for keeping your long cards alive
-# 4. Winning or losing the game - this is the largest and most important source of feedback
-# 
-# Critically, the GameState also keeps track of who "me" and the "opp" is using the turn priority. These things are used all over the code, and just refer to which player has turn priority and is making actions.
 
 import math
 
@@ -512,7 +464,7 @@ class GameState:
     def me(self):
         """Returns the current player based on turn priority"""
         return self.hero if self.turn_priority == "hero" else self.monster
-
+    
     @property
     def opp(self):
         """Returns the opponent based on turn priority"""
@@ -522,7 +474,7 @@ class GameState:
     def uncertainty(self):
         # Uncertainty: This is a useful value for AIs to know - It corresponds to how much hidden information there is.
         return len(self.opp.hand) + len(self.opp.deck) + len(self.opp.power_cards) + len(self.me.deck)
-
+    
     def pass_priority(self):
         """Swaps turn priority between hero and monster."""
         self.turn_priority = "monster" if self.turn_priority == "hero" else "hero"
@@ -543,7 +495,7 @@ class GameState:
         """Determine winner, if any."""
         monster_win = False
         hero_win = False
-
+    
         # Check Hero loss conditions
         if len(self.hero.deck) == 0:
             monster_win = True
@@ -553,11 +505,11 @@ class GameState:
                 self.hero.health = 1  # Keeps Hero alive
             else:
                 monster_win = True
-
+    
         # Check Monster loss conditions
         if self.monster.health < 1 or len(self.monster.deck) == 0:
             hero_win = True
-
+    
         # Determine final outcome
         if monster_win and hero_win:
             self.winner = "tie"
@@ -654,7 +606,7 @@ class GameState:
             # Call the methods you already wrote for Player
             "hero": self.hero.to_dict(),
             "monster": self.monster.to_dict(),
-
+            
             # Save the simple attributes
             "turn_priority": self.turn_priority,
             "game_phase": self.game_phase,
@@ -691,7 +643,7 @@ class GameState:
             cache=cache,
             game_mode=data["game_mode"]
         )
-
+        
         # Set any remaining attributes
         gs.turn_number = data["turn_number"]
         gs.game_phase = data["game_phase"]
@@ -701,20 +653,8 @@ class GameState:
         gs.tempo = data["tempo"]
         gs.killer_combo = data["killer_combo"]
         gs.long_card_value = data["long_card_value"]
-
+        
         return gs
-
-
-# ## The Action Class
-# 
-# The Action class is in charge of directing changes to the Gamestate. There are multiple kinds of actions, and each has their own subclass. Each subclass (sub-action) has three parts:
-# 1. is_legal() - this determines whether a given action is legal and returns with a boolean: True/False, depending. The game engine would break if an illegal action was executed, so this prevents that.
-# 2. execute() - this directs the changes to the Gamestate by changing the game phase, adding cards to the cache, and executing cards face-up or face-down (among other things).
-# 3. get_tempo() - if is_legal is like the "hard rules" of what can and cannot be done, get_tempo is like the soft rules which define a fuzzy boundary for the AI to follow. It is a form of feedback - positive, negative, or neutral - for every action.
-# 
-# All three of these functions are combined in the enact() function, which checks if an action is legal, gets the tempo, and then executes if it is legal. After a card is fully resolved, the turn ends, or an action is cancelled, the reset() function is called which empties the cache and resets the game_phase.
-# 
-# I wrote is_legal() based on the rules of the game, and I wrote get_tempo based on *what I believe* is the optimal strategy for the game. (This means get_tempo might be slightly biased, which could lead to the AI being slightly biased.) Thankfully, it doesn't need to be perfect - just enough to help the AI learn. 
 
 from typing import Tuple, Optional
 
@@ -785,7 +725,7 @@ class Action(object):
 class InvalidAction(Action):
     def is_legal(self):
         return False, ERROR_INVALID_SELECTION
-
+    
     def execute(self):
         raise ValueError("Invalid action taken")
 
@@ -801,22 +741,22 @@ class TargetHero(Action):
 
     def is_legal(self):
         return True, None
-
+    
     def execute(self):
         if self.resolving_card.name == "Go All In":
             #print("Playing Go All In")
             self.gs.hero.health -= 5
             self.gs.hero.draw(3)
-
+        
         elif self.resolving_card.name == "Fold":
             #print("Playing Fold")
             self.gs.hero.health += 4
             self.gs.hero.mill(2)
-
+        
         elif self.resolving_card.name == "Poker Face":
             #print("Playing Poker Face")
             self.gs.hero.health -= 4
-
+        
         elif self.resolving_card.name == "Cheap Shot":
             #print("Playing Cheap Shot")
             self.gs.hero.health -= 2
@@ -867,22 +807,22 @@ class TargetMonster(Action):
 
     def is_legal(self):
         return True, None
-
+    
     def execute(self):
         if self.resolving_card.name == "Go All In":
             #print("Playing Go All In")
             self.gs.monster.health -= 5
             self.gs.monster.draw(3)
-
+        
         elif self.resolving_card.name == "Fold":
             #print("Playing Fold")
             self.gs.monster.health += 4
             self.gs.monster.mill(2)
-
+        
         elif self.resolving_card.name == "Poker Face":
             #print("Playing Poker Face")
             self.gs.monster.health -= 4
-
+        
         elif self.resolving_card.name == "Cheap Shot":
             #print("Playing Cheap Shot")
             self.gs.monster.health -= 2
@@ -929,7 +869,7 @@ class GetCardInfo(Action):
         if self.gs.me.player_type.startswith("computer"):
             return False, ERROR_COMPUTERS_CANT_DO
         return True, None
-
+    
     def execute(self):
         # Display card info
         self.gs.game_phase = PHASE_VIEWING_CARD_INFO  # You can read card text and cancel
@@ -944,7 +884,7 @@ class Cancel(Action):
         if self.gs.me.player_type.startswith("computer"):
             return False, ERROR_COMPUTERS_CANT_DO
         return True, None
-
+    
     def execute(self):
         self.reset()  # Just resets the cache. No gamestate changes; all that's lost is information.
 
@@ -956,7 +896,7 @@ class Cancel(Action):
 class EndTurn(Action):
     def is_legal(self):
         return True, None  # If the option is available, it is always legal.
-
+    
     def execute(self):        
         if len(self.gs.me.hand) > 5:  # check if hand is over maximum hand size (5)
             self.gs.game_phase = PHASE_HAND_FULL_DISCARDING_CARD
@@ -1011,7 +951,7 @@ class SelectFromHand(Action):
                 return False
         else:
             return True
-
+        
     def is_legal(self):
         # Search card list for a card. If there is a match, action is legal.
         for card in self.card_list:
@@ -1028,7 +968,7 @@ class SelectFromHand(Action):
         #print(f"Added card '{self.resolving_card.name}' to cache via '{type(self).__name__}'")
         if self.gs.game_phase == PHASE_AWAITING_INPUT:
             self.gs.game_phase = PHASE_PLAYING_SELECTED_CARD
-
+        
         elif self.gs.game_phase == PHASE_HAND_FULL_DISCARDING_CARD:
             self.gs.me.discard(self.resolving_card)
             #print("Discarded card: " + self.resolving_card.name)
@@ -1075,7 +1015,7 @@ class SelectFromBattlefield(Action):
                         return False, ERROR_ACTION_WITHELD_FROM_AI  # The AI should never, ever target their own long card
                 return True, None
         return False, ERROR_INVALID_SELECTION  # If no match found
-
+    
     def execute(self) -> None:
         self.gs.cache.append(self.target)  # Add selected target to the cache
         #print(f"Added card '{self.target.name}' to cache via '{type(self).__name__}'")
@@ -1156,7 +1096,7 @@ class SelectFromOppHand(Action):
                 self.discard = card
                 return True, None
         return False, ERROR_INVALID_SELECTION  # If no match found
-
+    
     def execute(self):
         self.gs.cache.append(self.discard)  # Append discard to the cache for next step.
         #print(f"Added card '{self.discard.name}' to cache via '{type(self).__name__}'")
@@ -1191,7 +1131,7 @@ class SelectFromDeckTop2(Action):
                 self.selected_card = card
                 return True, None
         return False, ERROR_INVALID_SELECTION  # If no match found
-
+    
     def execute(self):
         if len(self.gs.me.deck) == 1:  # You can play this with one card left, but
             self.gs.me.draw()  # you just lose
@@ -1220,7 +1160,7 @@ class SelectFromGraveyard(Action):
         self.selected_card = None  # card to shuffle into deck
 
         self.resolving_card = self.gs.cache[0]  # In this case, Last Stand
-
+        
         self.previously_selected_cards = self.gs.cache[1:]
 
     def is_legal(self):
@@ -1325,7 +1265,7 @@ class SelectFromUltimatum(Action):
                 self.selected_card = card
                 return True, None
         return False, ERROR_INVALID_SELECTION  # If no match found
-
+    
     def execute(self):
         self.gs.cache.append(self.selected_card)  # Add to cache
         #print(f"Added card '{self.selected_card.name}' to cache via '{type(self).__name__}'")
@@ -1352,7 +1292,7 @@ class SelectFromDeckTop3(Action):
         self.selected_card = None  # card to rearrange
 
         self.resolving_card = self.gs.cache[0]  # In this case, Reconsider
-
+        
         self.previously_selected_cards = self.gs.cache[1:]
 
     def is_legal(self):
@@ -1364,7 +1304,7 @@ class SelectFromDeckTop3(Action):
                     self.selected_card = card
                     return True, None
         return False, ERROR_INVALID_SELECTION  # If no match found
-
+    
     def execute(self):
         self.gs.cache.append(self.selected_card)  # Append selected card to the cache until cache has 3 cards (not including resolving card)
         #print(f"Added card '{self.selected_card.name}' to cache via '{type(self).__name__}'")
@@ -1393,10 +1333,10 @@ class PlayFaceUp(Action):
     def is_legal(self) -> Tuple[bool, Optional[str]]:
         has_enough_power = self.resolving_card.power_cost <= self.gs.me.power
         has_free_short_card = self.gs.me.monsters_pawn_buff
-
+        
         if any(long_card.name == "The Sun" for long_card in self.gs.opp.battlefield) and self.gs.card_played_this_turn:
             return False, ERROR_ENEMY_HAS_THE_SUN  # If enemy has the sun, can't play 2 cards in a turn
-
+        
         elif self.resolving_card.card_type == "short":
             if self.resolving_card.name == "Noble Sacrifice":
                 if not self.gs.me.battlefield:
@@ -1413,7 +1353,7 @@ class PlayFaceUp(Action):
                 return True, None  # Can play a free short card thanks to Monster's Pawn
             elif not has_enough_power:
                 return False, ERROR_NOT_ENOUGH_POWER
-
+        
         elif self.resolving_card.card_type == "long":
             if not has_enough_power:
                 return False, ERROR_NOT_ENOUGH_POWER
@@ -1520,7 +1460,7 @@ class PlayFaceDown(Action):
     def __init__(self, gs, action_id):
         super().__init__(gs, action_id)
         self.resolving_card = self.gs.cache[0]
-
+    
     def is_legal(self):
         if any(long_card.name == "The Moon" for long_card in self.gs.opp.battlefield):  # Checking for The Moon (id 3)
             return False, ERROR_ENEMY_HAS_THE_MOON  #  If opponent has the moon, can't play power cards
@@ -1532,7 +1472,7 @@ class PlayFaceDown(Action):
             if self.gs.me.name == "hero" and self.resolving_card.name == "Awakening" and sum(1 for card in self.gs.me.hand if card.name == "Awakening") == 1:
                 return False, ERROR_ACTION_WITHELD_FROM_AI  # The AI should never play Awakening face down if they don't have another in their hand they can play
         return True, None
-
+    
     def execute(self):
         #print("playing card face down: " + self.card.name)
         self.gs.me.play_power_card(self.gs, self.resolving_card)
@@ -1574,13 +1514,6 @@ class PlayFaceDown(Action):
         elif self.resolving_card.name == "Cheap Shot" and any(card.name in ["The Sun", "The Moon"] for card in self.gs.opp.battlefield) and self.gs.me.power >= 2:
             self.gs.tempo -= 2  # You should play Cheap Shot *face-up*, not face-down, if it is in your hand, you have the power, and your opponent has a great target for it
         return self.gs.tempo
-
-
-# Although this next code cell doesn't seem straightforward, it actually makes the game flow really smoothly and intuitively when actually played.
-# 
-# Here is how it works (this is complicated, so it's not super important to read this section). The code cell below contains helpers to make the cards, decks, and actions. Cards and decks are made with the create_card() and build_deck() functions. Making actions is harder. As previously noted, the game phases coordinate multi-step cards that require several choices to resolve, like playing the card Last Stand face-up, where the player needs to choose from three different cards in their graveyard to shuffle into their deck - each of those choices corresponds to a game phase, specifically, PHASE_SELECTING_GRAVEYARD_CARD. The action_id is a number from 0-40, which has a different meaning depending on the situation. For example, action_id 40 ends the turn if the game phase is PHASE_PENDING_INPUT, but does nothing if the game phase is PHASE_SELECTING_GRAVEYARD_CARD. In most game phases, action_ids 0-39 mean selecting one of the 40 unique cards from a card list, like the graveyard in the case of Last Stand. If the card is not in that list, then the action is illegal. Different combinations of game_phase and action_id create a different action when the create_action() function is called. The ACTION_MAP is used to figure what action *subclass* to create in a given situation, based on the game rules and flow.
-# 
-# All of this was done so that the AI only has to make one choice at a time. This makes training much more simple, since all it has to do is choose a number from 0-40. (The output vector of the neural network corresponds to the action_id.)
 
 def create_card(name, card_id, uid, owner, card_type, power_cost, health, card_text):
     card_name_to_effect = {
@@ -1678,9 +1611,6 @@ def create_action(gs, action_id):
 # for i in range(num_actions):
 #     print(f"Action {i}: {ACTION_MAP[i][j] if ACTION_MAP[i][j] else 'None'}")
 
-
-# This code cells displays the information needed and actions available for a person to play the game in the console. It was mostly used for debugging.
-
 from copy import deepcopy
 
 def display_info(gs):
@@ -1744,12 +1674,12 @@ def display_info(gs):
 
 def display_actions(gs):
     print("Available Actions:")
-
+    
     for action_id in range(num_actions):  # Assuming 20 possible actions
         # print("Creating action: ", action_id)
         action = create_action(gs, action_id)
         legal, error = action.is_legal()
-
+        
         if legal:
             extra_info = ""
             action_name = type(action).__name__  # Get the class name
@@ -1774,19 +1704,8 @@ def display_actions(gs):
             print(f"[{action_id}] {action_name} {extra_info}") 
         elif error != ERROR_INVALID_SELECTION:  # QOL, error invalid shows up too often and don't need to see it
             print(f"[{action_id}] (Invalid) - {error}")
-
+        
     print("")  # For the newline
-
-
-# The purpose of the cell below is to create a rich feature vector for the reinforcement AI to learn on. Let me explain. The reinforcement AI is an artificial neural network, and artificial neural networks can only understand numbers. So how can someone turn the entire game into numbers? Well, one way to do this is to take the GameState and use various "encoders" that take the information held there and spit out some numbers that represent them. Some things are easy, like health, power, and deck size, which are already numbers. But how does something like a card get turned into a number? 
-# 
-# Well, this is where one-hot encoding comes in. This code cell has various 1-hot encoders that turn the player's zones into a vector that has one spot for every card that turns to 1 or 0 based on whether that card is available in that zone. 
-# 
-# Other information included in this feature vector is the game_phase, the cache, information that is revealed by certain cards like Peek and Reconsider, and other information I thought would be useful for the AI to know, like the degree of uncertainty of the current GameState.
-# 
-# Perhaps the most important information, the potential tempo for every available action, is not included in this function. For reasons of speed, it is faster for the computer to include that during the AI computations, found in the next section. 
-# 
-# Speaking of speed, it's very important for all of this code to be as quick and simple to compute as possible, because training an AI often takes thousands of simulated games to learn from.
 
 # This file needs to return a vector of constant size encoding almost all gamestate information
 # Input Vector Encoder
@@ -1837,7 +1756,7 @@ def encode_action_1hot(action_id=None):
 
 def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
     x = []  # Populate this vector with everything a player can see--in one-hot format so computers/ais can read it easily
-
+    
     # There are 5 zones per player: hand, deck, power cards, graveyard, and battlefield
     # Friendly zones:
     x += [len(gs.me.hand)/6]
@@ -1873,7 +1792,7 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
     x += [gs.me.health/29, gs.opp.health/29, gs.me.power/6, gs.me.power_plays_left, gs.uncertainty/32, gs.me.action_number/40,
           int(gs.me.monsters_pawn_buff), int(gs.me.last_stand_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first),
           gs.turn_number/15, int(gs.card_played_this_turn), int(gs.short_card_played_this_turn), gs.short_term_reward(gs.me.name)]  # Some of these values have been somewhat arbitrarily scaled to around 1 - this should help the AI
-
+    
     # Damage, deck burn, and lethal potential:
     damage_potential = sum(4 for card in gs.me.hand if card.name == "Poker Face") + sum(2 for card in gs.me.hand if card.name == "Cheap Shot") + sum(5 for card in gs.me.hand if card.name == "Go All In")
     x += [damage_potential/29]
@@ -1944,25 +1863,6 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
 
     # Then return tha damn thing
     return x
-
-
-# ## The Deep Reinforcement, "Long Short-Term Memory", Recurrent Neural Network Itself
-# 
-# Perhaps the most important formula in this entire 3,000+ lines of code program is the REINFORCE formula: **Loss = -log(prob)\*R**
-# 
-# Loss = the measure of how well the AI is doing
-# prob = the probability that the AI had of choosing the chosen action (this is a Monte-Carlo method)
-# R = the reward
-# 
-# The way this formula works is it increases the probability that the chosen action will be repeated in a similar situation **if it led to a positive reward** and it *decreases* the probability that the chosen action will be repeated in a similar situation **if it led to a negative reward**. In other words, actions that lead to positive rewards are repeated, while it stops doing actions that are punished. Sort of like training a dog. It will do what you reward, and stop doing what you punish. That puts it a bit harshly, but it gets the point across (the only difference is that all of this is using math).
-# 
-# All of this is done using PyTorch, a very convenient, yet slightly maddening, Python library that lets you set up an artificial neural network. My neural network is a recurrent neural network. I made this decision because my game is extremely cyclical and recursive. It turned out to be a good choice. Specifically, I used a "long short-term memory" network that can remember turns that occurred far in the past.
-# 
-# My network is a deep network because it has four layers: three recurrent layers and one feedforward layer. It works very well and pretty fast. I can train on 2,000 games in about ten minutes, which is about 80,000 learning updates per player. That's usually enough to teach the AI how to play the game to a good degree.
-# 
-# I also used a lot of the typical tools people use to help their models: dropout, a learning rate scheduler, entropy, epochs, temperature annealing, L2 regularization, LayerNorm, and gradient clipping.
-# 
-# There is a lot going on in this code cell. However, I hope the inline comments are enough to make clear what is going on. 
 
 import torch
 import torch.nn as nn
@@ -2105,7 +2005,7 @@ class Network(nn.Module):
 
             return action_id, new_rnn_state
 
-    def train_network(self, epochs=1):
+    def train_network(self, baseline, epochs=1):
         # This is the training loop that is called after the game is over, data has been collected, and there is a winner (or tie)
         # All of the actions that took place are recomputed N times, where N is the number of epochs, if N is greater than 1. If N=1, the data was computed during sample_action.
         # This applies the learning algorithm N times to optimize for the algorithm called 'REINFORCE'
@@ -2115,6 +2015,11 @@ class Network(nn.Module):
             print("Memory is empty, not training")
             self.reset_memory()  # Critical to reset memory!
             return [0] * self.epochs
+        # Save compute by not training if reward is null
+        if baseline == 0:
+            # print("Reward is 0, not training")
+            self.reset_memory()
+            return [0] * self.epochs  # Empty losses
 
         # print(f"Training {self.name}")
 
@@ -2132,11 +2037,14 @@ class Network(nn.Module):
         entropies = torch.stack(self.memory["entropies"]).to(device)
         logprobs = torch.stack(self.memory["logprobs"]).to(device)
 
-        # Calculating discounted reward signals
+        # Calculating discounted reward signals (courtesy of Gemini).
         reward_signals = torch.zeros(B).to(device)
         # These will be propagated backwards in time to calculate the reward signal for every action.
         long_discounted_sum = 0.0
         short_discounted_sum = 0.0
+        # Multiply rewards element-wise by baseline
+        long_rewards = long_rewards*baseline
+        short_rewards = short_rewards*baseline
         # Iterate backwards to calculate discounted returns efficiently
         for t in reversed(range(B)):
             long_discounted_sum = long_rewards[t] + self.long_term_gamma*long_discounted_sum
@@ -2145,8 +2053,7 @@ class Network(nn.Module):
             reward_signals[t] = long_discounted_sum + short_discounted_sum
         # Clamp negative rewards to make them less punishing
         # reward_signals = reward_signals.clamp(min=self.negative_reward_clamp)
-
-        # print(f"Num rewards: {len(reward_signals)}")
+        
         # for reward in reward_signals:
         #     print(f"{self.name} Reward signal: {reward.item()}")
         # print(f"Cumulative Reward: {reward_signals.sum().item():.2f} {self.name}")
@@ -2213,7 +2120,7 @@ class Network(nn.Module):
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
             self.optimizer.step()
-
+            
         if self.use_lr_scheduler:
             # Update only once per episode
             self.scheduler.step()
@@ -2243,15 +2150,6 @@ class Network(nn.Module):
     def get_state_dict(self):
         # For population-based training
         return deepcopy(self.state_dict())
-
-
-# ## Where it all comes together
-# 
-# The Main Class contains the central game loop in run_game(), as well as several training methods: 
-# 1. A simple training loop
-# 2. A way to train the AIs only on wins (using only positive reinforcement turns out to be useful)
-# 3. A way to train on a population of past opponents (this was used by Google DeepMind to train AlphaZero and AlphaGo, and significantly reduces overfitting)
-# And there's also a simple testing loop to test AI performance as a result of training.
 
 from numpy import mean
 from random import randint
@@ -2342,9 +2240,8 @@ class Main:
                 display_info(gs)
                 display_actions(gs)
 
-            me_ai = self.hero_ai if gs.turn_priority == "hero" else self.monster_ai
-            opp_ai = self.monster_ai if gs.turn_priority == "hero" else self.hero_ai
-
+            current_ai = self.hero_ai if gs.turn_priority == "hero" else self.monster_ai
+            
             while True:
                 try:
                     # For people:
@@ -2357,9 +2254,9 @@ class Main:
                     # For a computer AI:
                     elif gs.me.player_type == "computer_ai":
                         if gs.me.name == "hero":
-                            choice_number, _ = me_ai.sample_action(gs, training=train_hero)
+                            choice_number, _ = current_ai.sample_action(gs, training=train_hero)
                         elif gs.me.name == "monster":
-                            choice_number, _ = me_ai.sample_action(gs, training=train_monster)
+                            choice_number, _ = current_ai.sample_action(gs, training=train_monster)
                     # Create the action
                     action = create_action(gs, choice_number)
                     # Test if legal
@@ -2369,11 +2266,11 @@ class Main:
                         if display:
                             print(f"Executing action: {type(action).__name__} [{choice_number}]")
                         action.enact()
-                        # Append action results (reward).
-                        me_ai.memory["long_term_rewards"].append(torch.tensor(gs.long_term_reward(me_ai.name, self.tempo_weight), dtype=torch.float32))
-                        me_ai.memory["short_term_rewards"].append(torch.tensor(gs.short_term_reward(me_ai.name, self.tempo_weight), dtype=torch.float32))
-                        if gs.winner:  # If game is terminal, add opponent's game-end reward to their final reward
-                            opp_ai.memory["long_term_rewards"][-1] += torch.tensor(gs.long_term_reward(opp_ai.name, tempo_weight=0.0))
+                        # Append action results (reward)
+                        long_term_reward = gs.long_term_reward(current_ai.name, self.tempo_weight)
+                        current_ai.memory["long_term_rewards"].append(torch.tensor(long_term_reward, dtype=torch.float32))
+                        short_term_reward = gs.short_term_reward(current_ai.name, self.tempo_weight)
+                        current_ai.memory["short_term_rewards"].append(torch.tensor(short_term_reward, dtype=torch.float32))
                         if display:
                             print(f"Action Tempo: {gs.tempo}")
                             if gs.killer_combo:
@@ -2385,7 +2282,7 @@ class Main:
                             print(f"Action not legal: {reason}")
                 except ValueError:
                     print("Please enter a number.")
-
+        
         # Print winner with ~color~
         if display:
             if gs.winner == "monster":
@@ -2404,25 +2301,21 @@ class Main:
 
         # After the game, option to train AI on results, and at the same time, get loss data:
         if gs.hero.player_type == "computer_ai" and train_hero:
-            if train_only_on_wins and gs.winner != "hero":
-                self.hero_loss_data.extend([0] * self.hero_ai.epochs)
-                self.hero_ai.reset_memory()
-            else:
-                self.hero_loss_data.extend(self.hero_ai.train_network())
+            hero_baseline = 1
+            if gs.winner != "hero" and train_only_on_wins:
+                hero_baseline = 0
+            self.hero_loss_data.extend(self.hero_ai.train_network(baseline=hero_baseline))
         else:
-            self.hero_loss_data.extend([0] * self.hero_ai.epochs)  # So that the graphs don't break if player isn't an ai
-            self.hero_ai.reset_memory()
-
+            self.hero_loss_data.extend([0] * self.hyperparameters["epochs"])  # So that the graphs don't break if player isn't computer_ai
+        
         if gs.monster.player_type == "computer_ai" and train_monster:
-            if train_only_on_wins and gs.winner != "monster":
-                self.monster_loss_data.extend([0] * self.monster_ai.epochs)
-                self.monster_ai.reset_memory()
-            else:
-                self.monster_loss_data.extend(self.monster_ai.train_network())
+            monster_baseline = 1
+            if gs.winner != "monster" and train_only_on_wins:
+                monster_baseline = 0
+            self.monster_loss_data.extend(self.monster_ai.train_network(baseline=monster_baseline))
         else:
-            self.monster_loss_data.extend([0] * self.monster_ai.epochs)
-            self.monster_ai.reset_memory()
-
+            self.monster_loss_data.extend([0] * self.hyperparameters["epochs"])
+        
         return gs.winner
 
     def do_training_loop(self, best_of=1):
@@ -2444,9 +2337,10 @@ class Main:
                 self.hero_game_data.append(0)
                 self.monster_game_data.append(1)
             elif winner == "tie":
-                self.hero_game_data.append(0.5)
-                self.monster_game_data.append(0.5)
-
+                # Ties count the same as a loss to fix a small bug: when using the baseline=1, the next player to win after a tie gets to train and the other doesn't
+                self.hero_game_data.append(0)
+                self.monster_game_data.append(0)
+            
             if (i+1) % 100 == 0:
                 print(f" [{i+1}/{best_of}]")
 
@@ -2526,9 +2420,10 @@ class Main:
                 self.hero_game_data.append(0)
                 self.monster_game_data.append(1)
             elif winner == "tie":
-                self.hero_game_data.append(0.5)
-                self.monster_game_data.append(0.5)
-
+                # Ties count the same as a loss to fix a small bug: when using the baseline=1, the next player to win after a tie gets to train and the other doesn't
+                self.hero_game_data.append(0)
+                self.monster_game_data.append(0)
+            
             if (i+1) % 100 == 0:
                 print(f" [{i+1}/{best_of}]")
 
@@ -2594,9 +2489,9 @@ class Main:
                 if self.anneal_entropy and name == "monster":
                     anneal_entropy(monster_score)
             elif winner == "tie":
-                self.hero_game_data.append(0.5)
-                self.monster_game_data.append(0.5)
-
+                self.hero_game_data.append(0)
+                self.monster_game_data.append(0)
+            
             if (i+1) % 100 == 0:
                 if name == "hero":
                     print(f" [\033[92mH\033[0m{hero_score}/{cutoff}]")
@@ -2689,9 +2584,6 @@ class Main:
         plt.tight_layout()
         plt.show()
 
-
-# This contains the hyperparameters I used to train my model, as well as the training schedule I set up.
-
 # !ls /  # Shows that you are connected to Paperspace cloud GPU
 # Sometimes bugs occur from using a remote kernel.
 
@@ -2711,11 +2603,11 @@ hyperparameters = {
     "T_mult": 1,  # Multiply T_0 by this factor every time it restarts (default is 1)
     "eta_min": 1e-6,  # Anneal from lr (above) to this lr
     # Misc. Parameters:
-    "dropout_rate": 0.2,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
-    "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights.
-    "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed.
+    "dropout_rate": 0.25,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
+    "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights
+    "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed
     "temperature": 2,  # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
-    "entropy_coef": 0.01  # Higher values slow down learning, increase exploration, and slow convergence.
+    "entropy_coef": 0.02  # Higher values slow down learning, increase exploration, and slow convergence.
 }
 
 game_settings = {
@@ -2725,7 +2617,7 @@ game_settings = {
     "training_display": False,
     "hero_training": True,
     "monster_training": True,
-    "tempo_weight": 1.0,  # Non game-end rewards are multiplied by this value. Set to 0 to train only on game-end rewards (winning and losing).
+    "tempo_weight": 1.0,
     # Annealing:
     "anneal_temperature": False,
     "anneal_entropy": False,  # Linearly reduce entropy from entropy_coef to 0 over the course of training
@@ -2739,5 +2631,56 @@ game_settings = {
     "testing_display": True,
     # Misc.:
     "game_mode": 0,
-    "scale": 100  # Lower values are *less* zoomed in
+    "scale": 50  # Lower values are *less* zoomed in
 }
+
+main = Main(hyperparameters, **game_settings)
+main.load_ai_weights()
+
+# Training program:
+# for i in range(5):
+#     print(f"\nRound {i+1}, FIGHT!")
+#     # Pretrain Monster on random Hero
+#     main.training_hero_type = "computer_random"
+#     main.training_monster_type = "computer_ai"
+#     main.train_on_wins("monster", 250)
+#     # Pretrain Hero on random Monster
+#     main.training_hero_type = "computer_ai"
+#     main.training_monster_type = "computer_random"
+#     main.train_on_wins("hero", 250)
+#     # Train Hero and Monster on a pool of their past opponents
+#     main.training_hero_type = "computer_ai"
+#     main.training_monster_type = "computer_ai"
+#     main.anneal_temperature = True
+#     main.anneal_entropy = True
+#     main.train_on_population(500)
+#     main.hero_ai.temperature /= 2
+#     main.monster_ai.temperature /= 2
+#     main.hero_ai.entropy_coef /= 2
+#     main.monster_ai.entropy_coef /= 2
+#     main.hero_ai.optimizer.param_groups[0]['lr'] /= 2
+#     main.monster_ai.optimizer.param_groups[0]['lr'] /= 2
+# Post-train using winning and losing as only feedback
+main.hero_ai.optimizer.param_groups[0]['lr'] = 1e-5
+main.monster_ai.optimizer.param_groups[0]['lr'] = 1e-5
+main.hero_ai.use_lr_scheduler = False
+main.monster_ai.use_lr_scheduler = False
+main.anneal_entropy = False
+main.hero_ai.entropy_coef = 0.001
+main.monster_ai.entropy_coef = 0.001
+main.anneal_temperature = False
+main.hero_ai.temperature = 0.1
+main.monster_ai.temperature = 0.1
+main.tempo_weight = 0.0  # Important
+main.train_on_population(1000)
+# After training, test the AI against each other
+main.hero_training = False
+main.monster_training = False
+main.hero_ai.temperature = 0.0001
+main.monster_ai.temperature = 0.0001
+main.do_testing_loop(1)
+main.plot_graphs()
+main.save_ai_weights()
+# If using Paperspace, weights will be saved to the cloud
+
+# jupyter nbconvert --to script --no-prompt --output poker_monster "Poker Monster - With Documentation.ipynb" 
