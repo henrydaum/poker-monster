@@ -3,6 +3,7 @@ from flask_session import Session
 from datetime import timedelta
 import torch
 import random
+import re
 from poker_monster import (
     Network, create_action, GameState, Player, build_decks, 
     hyperparameters, num_actions, 
@@ -115,6 +116,12 @@ def get_display_info(gs):
 
 def get_available_actions(gs):
     actions = []
+
+    def add_spaces(text):
+        spaced_text = re.sub(r'(\B[A-Z])', r' \1', text)
+        lower_text = spaced_text.lower()
+        return lower_text.capitalize()
+
     for action_id in range(num_actions):  # Assuming 20 possible actions
         # print("Creating action: ", action_id)
         action = create_action(gs, action_id)
@@ -141,7 +148,7 @@ def get_available_actions(gs):
                 extra_info = f": {action.selected_card.name}" if action.card_list else ""
             if action_name == "SelectFromDeckTop3":
                 extra_info = f": {action.selected_card.name}" if action.card_list else ""
-            total_string = action_name + " " + extra_info
+            total_string = add_spaces(action_name) + " " + extra_info
             actions.append({"id": action_id, "name": total_string})
         elif error != ERROR_INVALID_SELECTION:  # QOL, error invalid shows up too often and don't need to see it
             total_string = "(Invalid) - " + error
@@ -153,8 +160,8 @@ def take_ai_turn(gs, prev_rnn_state):
     """Processes the AI's turn, managing its hidden state."""
     # This loop handles cases where the AI might take multiple actions in a row
     while gs.winner is None and gs.me.player_type.startswith("computer"):
-        if gs.me.player_type in ["computer_ai", "computer_mind_controlled"]:
-            if gs.me.player_type == "computer_mind_controlled":
+        if gs.me.player_type in ["computer_ai", "computer_mind_control"]:
+            if gs.me.player_type == "computer_mind_control":
                 print("Player is Mind Controlled")
 
             current_ai = hero_ai if gs.me.name == "hero" else monster_ai
@@ -250,12 +257,18 @@ def game():
     if gs.winner:
         session['winner'] = gs.winner
         return redirect(url_for("choice_screen"))
+
+    player_role_class = ""
+    if gs.hero.player_type == 'person':
+        player_role_class = 'player-is-hero'
+    elif gs.monster.player_type == 'person':
+        player_role_class = 'player-is-monster'
     
     # Get the necessary info to display
     game_info = get_display_info(gs)
     available_actions = get_available_actions(gs)
     
-    return render_template("game.html", info=game_info, actions=available_actions)
+    return render_template("game.html", info=game_info, actions=available_actions, player_role=player_role_class)
 
 @app.route("/submit_action", methods=["POST"])
 def submit_action():

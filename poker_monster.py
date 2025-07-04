@@ -307,7 +307,8 @@ class Peek(Card):
 class MindControl(Card):
     def effect(self, gs):
         # print("Playing Mind Control")
-        gs.opp.player_type = "computer_mind_controlled"
+        gs.opp.is_mind_controlled = True
+        gs.opp.player_type = "computer_mind_control"
 
 
 # ## The Player Class
@@ -348,6 +349,7 @@ class Player:
         self.starting_player_type = player_type  # For Mind Control
         self.action_number = 0
         self.game_mode = 0  # 0 is normal mode, 1 is "Power Trip" mode - power carries over at the end of the turn. Used to increase difficulty.
+        self.is_mind_controlled = False
 
     def start_turn(self, gs):
         self.last_turn_log = []
@@ -372,8 +374,9 @@ class Player:
             self.power = 0
         elif gs.turn_number == 0:
             self.power = 0
-        if self.player_type == "computer_mind_controlled":
+        if self.is_mind_controlled == True:
             self.player_type = self.starting_player_type
+            self.is_mind_controlled = False
             # print("Mind control stopped")
         gs.pass_priority()
 
@@ -1524,7 +1527,7 @@ class PlayFaceUp(Action):
             else:
                 self.gs.tempo += 0  # Mid-game play is alright but not ideal.
         elif self.resolving_card.name == "Mind Control":
-            self.gs.tempo += 2
+            self.gs.tempo += 3  # Overpowered card
         if self.resolving_card.card_type == "long":
             self.gs.tempo += 1  # You get tempo for playing long cards
         if self.resolving_card.power_cost >= 3:
@@ -2118,7 +2121,7 @@ class Network(nn.Module):
             entropy = dist.entropy()
             # Get a random sample (sample size=1); dist.sample returns the index of the sampled value. This is a Monte-Carlo approach to learning.
             sample = dist.sample()  # Tensor
-            if gs.me.player_type == "computer_mind_controlled":
+            if gs.me.player_type == "computer_mind_control":
                 mind_controlled_logits = masked_logits.clone()
                 mind_controlled_logits[mind_controlled_logits == float('-inf')] = float('inf')  # Fix to enable a safe argmin
                 action_id = torch.argmin(mind_controlled_logits).item()
@@ -2386,7 +2389,7 @@ class Main:
                     elif gs.me.player_type == "computer_random":
                         choice_number = randint(0, num_actions - 2)  # -2 because cancel is not available to computers
                     # For a computer AI:
-                    elif gs.me.player_type in ["computer_ai", "computer_mind_controlled"]:
+                    elif gs.me.player_type in ["computer_ai", "computer_mind_control"]:
                         if gs.me.name == "hero":
                             choice_number, _ = me_ai.sample_action(gs, training=train_hero)
                         elif gs.me.name == "monster":
@@ -2434,7 +2437,7 @@ class Main:
                 print("T", end="")
 
         # After the game, option to train AI on results, and at the same time, get loss data:
-        if gs.hero.player_type in ["computer_ai", "computer_mind_controlled"] and train_hero:
+        if gs.hero.player_type in ["computer_ai", "computer_mind_control"] and train_hero:
             if train_only_on_wins and gs.winner != "hero":
                 self.hero_loss_data.extend([0] * self.hero_ai.epochs)
                 self.hero_ai.reset_memory()
@@ -2444,7 +2447,7 @@ class Main:
             self.hero_loss_data.extend([0] * self.hero_ai.epochs)  # So that the graphs don't break if player isn't an ai
             self.hero_ai.reset_memory()
 
-        if gs.monster.player_type in ["computer_ai", "computer_mind_controlled"] and train_monster:
+        if gs.monster.player_type in ["computer_ai", "computer_mind_control"] and train_monster:
             if train_only_on_wins and gs.winner != "monster":
                 self.monster_loss_data.extend([0] * self.monster_ai.epochs)
                 self.monster_ai.reset_memory()
