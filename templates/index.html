@@ -19,6 +19,9 @@
             border-radius: 8px;
             margin: 10px;
         }
+        .difficulty-selector { margin-bottom: 20px; }
+        .difficulty-selector label { font-size: 18px; margin-right: 10px; }
+        .difficulty-selector select { padding: 8px; font-size: 16px; border-radius: 5px; }
     </style>
 </head>
 <body>
@@ -34,10 +37,67 @@
         {% else %}
             <h2>Choose Your Role</h2>
             <div class="choice-box">
-                <a href="{{ url_for('start_game', role='hero') }}">Play as Hero</a>
-                <a href="{{ url_for('start_game', role='monster') }}">Play as Monster</a>
+                <a id="play-hero-link" href="{{ url_for('start_game', role='hero', difficulty=0) }}">Play as Hero</a>
+                <a id="play-monster-link" href="{{ url_for('start_game', role='monster', difficulty=0) }}">Play as Monster</a>
+            </div>
+            </p>
+            </p>
+            <div class="difficulty-selector">
+                <label for="difficulty">Difficulty:</label>
+                <select name="difficulty" id="difficulty-select">
+                    <option value="0" selected>Easy</option>
+                    <option value="1">Medium</option>
+                    <option value="2">Hard</option>
+                </select>
             </div>
         {% endif %}
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const difficultySelect = document.getElementById('difficulty-select');
+            const heroLink = document.getElementById('play-hero-link');
+            const monsterLink = document.getElementById('play-monster-link');
+
+            function updateLinks() {
+                const difficulty = difficultySelect.value;
+                heroLink.href = `{{ url_for('start_game', role='hero') }}&difficulty=${difficulty}`;
+                monsterLink.href = `{{ url_for('start_game', role='monster') }}&difficulty=${difficulty}`;
+            }
+
+            if (difficultySelect) {
+                difficultySelect.addEventListener('change', updateLinks);
+            }
+        });
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const difficultySelect = document.getElementById('difficulty-select');
+            const heroLink = document.getElementById('play-hero-link');
+            const monsterLink = document.getElementById('play-monster-link');
+
+            function updateLinks() {
+                const difficulty = difficultySelect.value;
+                heroLink.href = `{{ url_for('start_game', role='hero') }}&difficulty=${difficulty}`;
+                monsterLink.href = `{{ url_for('start_game', role='monster') }}&difficulty=${difficulty}`;
+                // Save the selected difficulty to localStorage
+                localStorage.setItem('pokerMonsterDifficulty', difficulty);
+            }
+
+            // Load the saved difficulty from localStorage
+            const savedDifficulty = localStorage.getItem('pokerMonsterDifficulty');
+            if (savedDifficulty) {
+                difficultySelect.value = savedDifficulty;
+            }
+
+            // Initial call to set the links correctly on page load
+            updateLinks();
+
+            // Add event listener for changes
+            if (difficultySelect) {
+                difficultySelect.addEventListener('change', updateLinks);
+            }
+        });
+    </script>
 </body>
 </html>

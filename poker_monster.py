@@ -26,7 +26,7 @@ hero_card_data = [
     (2, "A Pearlescent Dragon", "hero", 5, "long", 4, "At the start of your turn, you get to steal 5 health from the Monster. (Repeat this every turn.)"),
     (1, "Last Stand", "hero", 0, "short", None, "Shuffle 3 other cards from your discard pile into your deck. Until your next turn starts, your health can't reach 0 (damage that would put it to less than 1 puts it to 1 instead.)"),
     (2, "Reconsider", "hero", 1, "short", None, "Look at the top 3 cards of your deck, and put them back in any order you choose."),
-    (3, "Noble Sacrifice", "hero", 1, "short", None, "As an additional cost to play this card, you must sacrifice a long card. Look at your opponent's hand and discard a card from it.")
+    (3, "Noble Sacrifice", "hero", 1, "short", None, "As an additional cost to play this card, you must sacrifice a long card. Look at your opponent's hand and discard a card from it."),
 ]
 """The data format is: quantity, name, owner, power_cost, card_type, health, card text"""
 
@@ -42,7 +42,10 @@ monster_card_data = [
     (3, "Peek", "monster", 1, "short", None, "Look at the top 2 cards of your deck and put one into your hand, and the other on the bottom of your deck."),
 ]
 
-card_data = hero_card_data + monster_card_data
+# New card, used to increase the difficulty:
+mind_control_data = (1, "Mind Control", "either", 4, "short", None, "You control your opponent's next turn. (This card cannot be discarded or stolen.)")
+
+card_data = hero_card_data + monster_card_data + [mind_control_data]  # Comment out '+ [mind_control_data]' to remove it from the game
 
 num_cards = 0
 
@@ -56,6 +59,8 @@ for i in range(len(card_data)):
         if card_type == "long":
             long_cards_vector.append(uid)
         uid += 1
+
+num_actions = num_cards + 2  # +2 for end turn and cancel, computers can't cancel so for them it's num_cards + 1
 
 # Game phases. The strings can be edited to say anything and the game will run the same.
 PHASE_AWAITING_INPUT = "Awaiting input."
@@ -103,8 +108,6 @@ ERROR_MUST_HAVE_DIFFERENT_NAME = "Card must have a different name."
 ERROR_NO_FURTHER_MOVES = "No further moves available with this card."
 ERROR_COMPUTERS_CANT_DO = "Computers can't do this action."  # Canceling and seeing card info are QOL features for people, not computers
 ERROR_ACTION_WITHELD_FROM_AI = "This action is witheld from AIs since it would harm their strategy"  # These are like automatic reflexes for the AI - things not to do that would harm 
-
-num_actions = num_cards + 2  # +2 for end turn and cancel, computers can't cancel so for them it's num_cards + 1
 
 
 # ## The Card Class
@@ -301,6 +304,11 @@ class Peek(Card):
         gs.me.deck.append(deck_top2[0])  # Put the other card on the bottom.
         # Don't forget to get the index!
 
+class MindControl(Card):
+    def effect(self, gs):
+        # print("Playing Mind Control")
+        gs.opp.player_type = "computer_mind_controlled"
+
 
 # ## The Player Class
 # 
@@ -320,7 +328,7 @@ class Peek(Card):
 # The Player Class has various functions that are called on from the Action class with certain actions. That's what all the functions are for.
 
 class Player:
-    def __init__(self, name, deck, player_type="computer"):
+    def __init__(self, name, deck, player_type="computer_random"):
         # Initializes a player with a name and a deck of cards.
         self.name = name  # "hero " or "monster"
         self.deck = deck
@@ -337,7 +345,9 @@ class Player:
         self.monsters_pawn_buff = False
         self.going_first = False
         self.player_type = player_type # "person" or "computer" - being a computer means being unable to cancel actions or view card info
+        self.starting_player_type = player_type  # For Mind Control
         self.action_number = 0
+        self.game_mode = 0  # 0 is normal mode, 1 is "Power Trip" mode - power carries over at the end of the turn. Used to increase difficulty.
 
     def start_turn(self, gs):
         self.last_turn_log = []
@@ -358,8 +368,13 @@ class Player:
             #print("Last Stand buff wore off")
 
     def end_turn(self, gs):
-        if gs.game_mode == 0:  # Reset power if game mode is normal. Else, let it carry over. Simple change.
+        if self.game_mode == 0:  # Reset power if game mode is normal. Else, let it carry over. Simple change.
             self.power = 0
+        elif gs.turn_number == 0:
+            self.power = 0
+        if self.player_type == "computer_mind_controlled":
+            self.player_type = self.starting_player_type
+            # print("Mind control stopped")
         gs.pass_priority()
 
     def draw(self, qty=1):
@@ -441,6 +456,7 @@ class Player:
             "going_first": self.going_first,
             "player_type": self.player_type,
             "action_number": self.action_number,
+            "game_mode": self.game_mode,
 
             # Create a list of nested card dictionaries for each card zone
             "hand": [card.to_dict() for card in self.hand],
@@ -466,6 +482,7 @@ class Player:
         player.going_first = data["going_first"]
         player.player_type = data["player_type"]
         player.action_number = data["action_number"]
+        player.game_mode = data["game_mode"]
 
         # Rebuild the card lists using Card.from_dict()
         player.hand = [Card.from_dict(card_data) for card_data in data["hand"]]
@@ -490,7 +507,7 @@ class Player:
 import math
 
 class GameState:
-    def __init__(self, hero, monster, turn_priority=None, game_phase=PHASE_AWAITING_INPUT, cache=[], game_mode=0):
+    def __init__(self, hero, monster, turn_priority=None, game_phase=PHASE_AWAITING_INPUT, cache=[]):
         # Initializes the game state. Contains both players.
         self.hero = hero
         self.monster = monster
@@ -499,7 +516,6 @@ class GameState:
         self.cache = cache  # The cache, similar to Magic: The Gathering's stack
         self.turn_number = 0
         self.winner = None
-        self.game_mode = game_mode  # 0 is normal mode, 1 is "Power Trip" mode--power carries over at the end of the turn. Not often used (for future development).
 
         self.card_played_this_turn = False  # Flag to track if any card has been played this turn
         self.short_card_played_this_turn = False
@@ -660,7 +676,6 @@ class GameState:
             "game_phase": self.game_phase,
             "turn_number": self.turn_number,
             "winner": self.winner,
-            "game_mode": self.game_mode,
 
             # Flags:
             "card_played_this_turn": self.card_played_this_turn,
@@ -688,8 +703,7 @@ class GameState:
             monster=monster,
             turn_priority=data["turn_priority"],
             game_phase=data["game_phase"],
-            cache=cache,
-            game_mode=data["game_mode"]
+            cache=cache
         )
 
         # Set any remaining attributes
@@ -1070,7 +1084,7 @@ class SelectFromBattlefield(Action):
         for long_card in self.card_list:
             if long_card.uid == self.action_id:
                 self.target = long_card
-                if self.gs.me.player_type.startswith("computer_ai"):
+                if self.gs.me.player_type == "computer_ai":
                     if self.target in self.gs.me.battlefield:
                         return False, ERROR_ACTION_WITHELD_FROM_AI  # The AI should never, ever target their own long card
                 return True, None
@@ -1203,9 +1217,9 @@ class SelectFromDeckTop2(Action):
             self.reset()
 
     def get_tempo(self):
-        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "Cheap Shot"]:
+        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "Cheap Shot", "A Playful Pixie", "A Pearlescent Dragon", "Mind Control"]:
             self.gs.tempo += 1  # These are high priority cards, especially Go All In and The 'Ol Switcheroo
-            if self.selected_card.name in ["Go All In", "The 'Ol Switcheroo"]:
+            if self.selected_card.name in ["Go All In", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Mind Control"]:
                 self.gs.tempo += 1
         else:
             self.gs.tempo += 0
@@ -1248,7 +1262,7 @@ class SelectFromGraveyard(Action):
 
     def get_tempo(self):
         # Rewards to trigger for card selections:
-        if self.selected_card.name in ["The Sun", "A Playful Pixie", "A Pearlescent Dragon", "Noble Sacrifice"]:
+        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Last Stand", "Noble Sacrifice", "Mind Control"]:
             self.gs.tempo += 1  # These are good targets to shuffle back into the deck
         elif self.selected_card.name in ["Healthy Eating", "Reconsider"]:
             self.gs.tempo -= 1  # Don't do this since you usually don't need more of these and Healthy Eating draws a card, reducing deck size which is not good for the late game
@@ -1298,9 +1312,9 @@ class SelectFromDeck(Action):
             #print("Passed priority")
 
     def get_tempo(self):
-        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Last Stand", "Noble Sacrifice"]:
+        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Last Stand", "Noble Sacrifice", "Mind Control"]:
             self.gs.tempo += 1  # These are high priority cards, especially Go All In and The 'Ol Switcheroo for Monster and Pixie and Dragon for Hero
-            if self.selected_card.name in ["Go All In", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon"]:
+            if self.selected_card.name in ["Go All In", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Mind Control"]:
                 self.gs.tempo += 1
         else:
             self.gs.tempo += 0  # All other cards are not good, but not really bad either. You shouldn't be punished for not picking the above cards if they are not available.
@@ -1379,7 +1393,7 @@ class SelectFromDeckTop3(Action):
     def get_tempo(self):
         if self.selected_card.card_type == "long":  # It's generally good to move long cards to the top, especially Dragon and Pixie
             self.gs.tempo += 1
-            if self.selected_card.name in ["A Playful Pixie", "A Pearlescent Dragon"]:
+            if self.selected_card.name in ["A Playful Pixie", "A Pearlescent Dragon", "Mind Control"]:
                 self.gs.tempo += 1
         self.gs.tempo += 0  # This is a very low tempo card, but maybe certain choices should be rewarded
         return self.gs.tempo
@@ -1401,9 +1415,9 @@ class PlayFaceUp(Action):
             if self.resolving_card.name == "Noble Sacrifice":
                 if not self.gs.me.battlefield:
                     return False, ERROR_NO_SACRIFICE  # Must have available sacrifice
-                if not self.gs.opp.hand and self.gs.me.player_type.startswith("computer_ai"):
+                if not self.gs.opp.hand and self.gs.me.player_type == "computer_ai":
                     return False, ERROR_ACTION_WITHELD_FROM_AI  # Helping out the AI
-            if self.gs.me.player_type.startswith("computer_ai"):
+            if self.gs.me.player_type == "computer_ai":
                 if self.resolving_card.name == "The 'Ol Switcheroo" and self.gs.me.health >= self.gs.opp.health:
                     return False, ERROR_ACTION_WITHELD_FROM_AI  # Helping out the AI, you would never play Switcheroo if your opponent would benefit from it
                 if self.resolving_card.name == "Awakening" and not any(card for card in self.gs.me.power_cards if card.card_type == "long"):
@@ -1509,6 +1523,8 @@ class PlayFaceUp(Action):
                 self.gs.tempo -= 1  # Try to save it for late game.
             else:
                 self.gs.tempo += 0  # Mid-game play is alright but not ideal.
+        elif self.resolving_card.name == "Mind Control":
+            self.gs.tempo += 2
         if self.resolving_card.card_type == "long":
             self.gs.tempo += 1  # You get tempo for playing long cards
         if self.resolving_card.power_cost >= 3:
@@ -1526,8 +1542,8 @@ class PlayFaceDown(Action):
             return False, ERROR_ENEMY_HAS_THE_MOON  #  If opponent has the moon, can't play power cards
         elif self.gs.me.power_plays_left < 1:
             return False, ERROR_CANT_PLAY_ANOTHER_POWER_CARD
-        if self.gs.me.player_type.startswith("computer_ai"):
-            if self.gs.me.name == "monster" and (self.resolving_card.name == "Go All In" or self.resolving_card.name == "The 'Ol Switcheroo"):  # The AI should never, ever do this
+        if self.gs.me.player_type == "computer_ai":
+            if self.gs.me.name == "monster" and (self.resolving_card.name in ["Go All In" , "The 'Ol Switcheroo", "Mind Control"]):  # The AI should never, ever do this
                 return False, ERROR_ACTION_WITHELD_FROM_AI
             if self.gs.me.name == "hero" and self.resolving_card.name == "Awakening" and sum(1 for card in self.gs.me.hand if card.name == "Awakening") == 1:
                 return False, ERROR_ACTION_WITHELD_FROM_AI  # The AI should never play Awakening face down if they don't have another in their hand they can play
@@ -1597,13 +1613,17 @@ def create_card(name, card_id, uid, owner, card_type, power_cost, health, card_t
         "Cheap Shot": CheapShot,
         "The 'Ol Switcheroo": TheOlSwitcheroo,
         "Ultimatum": Ultimatum,
-        "Peek": Peek
+        "Peek": Peek,
+        "Mind Control": MindControl
     }  # Not all cards need their own subclass
 
     CardClass = card_name_to_effect.get(name, Card)
     return CardClass(name, card_id, uid, owner, card_type, power_cost, health, card_text)
 
-def build_decks():
+def build_decks(hero_mcontrol=False, monster_mcontrol=False):
+    # if hero_mcontrol or monster_mcontrol:
+    #     card_data.append(mind_control_data)
+
     hero_deck = []
     monster_deck = []
     uid = 0
@@ -1611,13 +1631,22 @@ def build_decks():
     for quantity, name, owner, power_cost, card_type, health, card_text in card_data:
         for i in range(quantity):
             if owner == "hero":
-                    card = create_card(name, card_id, uid, owner, card_type, power_cost, health, card_text)
-                    uid += 1  # Increment uid for each unique card
-                    hero_deck.append(card)
+                card = create_card(name, card_id, uid, owner, card_type, power_cost, health, card_text)
+                uid += 1  # Increment uid for each unique card
+                hero_deck.append(card)
             elif owner == "monster":
-                    card = create_card(name, card_id, uid, owner, card_type, power_cost, health, card_text)
-                    uid += 1
+                card = create_card(name, card_id, uid, owner, card_type, power_cost, health, card_text)
+                uid += 1
+                monster_deck.append(card)
+            elif owner == "either":
+                # Mind Control
+                if hero_mcontrol:
+                    card = create_card(name, card_id, uid, "hero", card_type, power_cost, health, card_text)
+                    hero_deck.append(card)
+                if monster_mcontrol:
+                    card = create_card(name, card_id, uid, "monster", card_type, power_cost, health, card_text)
                     monster_deck.append(card)
+                uid += 1
         card_id += 1  # Increment card_id for each new card name
     return hero_deck, monster_deck
 
@@ -2089,8 +2118,13 @@ class Network(nn.Module):
             entropy = dist.entropy()
             # Get a random sample (sample size=1); dist.sample returns the index of the sampled value. This is a Monte-Carlo approach to learning.
             sample = dist.sample()  # Tensor
-            # Convert to integer
-            action_id = sample.item()
+            if gs.me.player_type == "computer_mind_controlled":
+                mind_controlled_logits = masked_logits.clone()
+                mind_controlled_logits[mind_controlled_logits == float('-inf')] = float('inf')  # Fix to enable a safe argmin
+                action_id = torch.argmin(mind_controlled_logits).item()
+            else:
+                # Convert to integer
+                action_id = sample.item()
             # Calculate logprob for training when epochs=1
             logprob = torch.log(probs[action_id])
             # Save important data to memory for training
@@ -2278,7 +2312,6 @@ class Main:
         self.testing_monster_type = kwargs["testing_monster_type"]
         self.testing_display = kwargs["testing_display"]
         # Misc.
-        self.game_mode = kwargs["game_mode"]
         self.scale = kwargs["scale"]
         # Data from training:
         self.hero_loss_data = []  # To be filled out after training and used for graphs
@@ -2308,10 +2341,8 @@ class Main:
         print(f"Total parameters: {self.hero_ai.num_params}")
         print(f"Input vector size: {self.hero_ai.input_size}")
 
-    def run_game(self, player_type_hero, player_type_monster, display=True, train_hero=False, train_monster=False, train_only_on_wins=False):
-        # game_mode 0 is normal mode, game_mode 1 is "Power Trip" mode
-
-        hero_deck, monster_deck = build_decks()
+    def run_game(self, player_type_hero, player_type_monster, display=True, train_hero=False, train_monster=False, train_only_on_wins=False, hero_mcontrol=False, monster_mcontrol=False):
+        hero_deck, monster_deck = build_decks(hero_mcontrol, monster_mcontrol)
         hero = Player("hero", hero_deck, player_type_hero)
         monster = Player("monster", monster_deck, player_type_monster)
 
@@ -2326,7 +2357,7 @@ class Main:
             hero.going_first = True
 
         # Initialize the game state, resetting important variables like the game phase, cache, and turn history
-        gs = GameState(hero, monster, going_first, PHASE_AWAITING_INPUT, cache=[], game_mode=self.game_mode)
+        gs = GameState(hero, monster, going_first, PHASE_AWAITING_INPUT, cache=[])
         hero.shuffle()
         monster.shuffle()
         hero.draw(4)
@@ -2355,7 +2386,7 @@ class Main:
                     elif gs.me.player_type == "computer_random":
                         choice_number = randint(0, num_actions - 2)  # -2 because cancel is not available to computers
                     # For a computer AI:
-                    elif gs.me.player_type == "computer_ai":
+                    elif gs.me.player_type in ["computer_ai", "computer_mind_controlled"]:
                         if gs.me.name == "hero":
                             choice_number, _ = me_ai.sample_action(gs, training=train_hero)
                         elif gs.me.name == "monster":
@@ -2403,7 +2434,7 @@ class Main:
                 print("T", end="")
 
         # After the game, option to train AI on results, and at the same time, get loss data:
-        if gs.hero.player_type == "computer_ai" and train_hero:
+        if gs.hero.player_type in ["computer_ai", "computer_mind_controlled"] and train_hero:
             if train_only_on_wins and gs.winner != "hero":
                 self.hero_loss_data.extend([0] * self.hero_ai.epochs)
                 self.hero_ai.reset_memory()
@@ -2413,7 +2444,7 @@ class Main:
             self.hero_loss_data.extend([0] * self.hero_ai.epochs)  # So that the graphs don't break if player isn't an ai
             self.hero_ai.reset_memory()
 
-        if gs.monster.player_type == "computer_ai" and train_monster:
+        if gs.monster.player_type in ["computer_ai", "computer_mind_controlled"] and train_monster:
             if train_only_on_wins and gs.winner != "monster":
                 self.monster_loss_data.extend([0] * self.monster_ai.epochs)
                 self.monster_ai.reset_memory()
@@ -2479,7 +2510,7 @@ class Main:
 
         return hero_score, monster_score
 
-    def train_on_population(self, best_of=1):
+    def train_on_population(self, best_of=1, use_mcontrol=False):
         # This is the same kind of training loop what was used in AlphaZero and AlphaGo, where the AI trains against a pool of past opponents.
         start_time = time.time()
         hero_score = 0
@@ -2495,12 +2526,16 @@ class Main:
                 opponent_ai = self.monster_ai
                 oppponent_pool = self.monster_pool
                 train_hero, train_monster = True, False
+                if use_mcontrol:
+                    hero_mcontrol, monster_mcontrol = True, False  # This is so that the AIs always train against an opponent with no Mind Control (realistic training)
             else:
                 # Monster is training, Hero is frozen opponent
                 learner_ai = self.monster_ai
                 opponent_ai = self.hero_ai
                 oppponent_pool = self.hero_pool
                 train_hero, train_monster = False, True
+                if use_mcontrol:
+                    hero_mcontrol, monster_mcontrol = False, True
 
             if opponent_pool:
                 random_weights = random.choice(oppponent_pool)
@@ -2510,7 +2545,9 @@ class Main:
                                 player_type_monster=self.training_monster_type, 
                                 display=self.training_display, 
                                 train_hero=train_hero, 
-                                train_monster=train_monster)
+                                train_monster=train_monster,
+                                hero_mcontrol=hero_mcontrol,
+                                monster_mcontrol=monster_mcontrol)
 
             if (i+1) % self.save_frequency == 0:
                 # print(f"Saving AI weights at game {i+1}")
@@ -2738,6 +2775,5 @@ game_settings = {
     "testing_monster_type": "computer_ai",
     "testing_display": True,
     # Misc.:
-    "game_mode": 0,
     "scale": 100  # Lower values are *less* zoomed in
 }

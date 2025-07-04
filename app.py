@@ -35,12 +35,10 @@ hero_ai.to(device)
 monster_ai.to(device)
 try:  # Load hero_ai
     hero_ai.load("hero")
-    # hero_ai = torch.quantization.quantize_dynamic(hero_ai, {torch.nn.GRU, torch.nn.Linear}, dtype=torch.qint8)
 except Exception as e:
     print(f"Could not load hero_ai: {e}")
 try:  # Load monster_ai
     monster_ai.load("monster")
-    # monster_ai = torch.quantization.quantize_dynamic(monster_ai, {torch.nn.GRU, torch.nn.Linear}, dtype=torch.qint8)
 except Exception as e:
     print(f"Could not load monster_ai: {e}")
 hero_ai.temperature = 0.0001
@@ -53,20 +51,6 @@ def serialize_rnn_state(rnn_state):
 def deserialize_rnn_state(state_list):
     """Converts a list tuple from the session back into a PyTorch hidden state."""
     return torch.tensor(state_list).to(device)
-
-def take_ai_turn(gs, prev_rnn_state):
-    """Processes the AI's turn, managing its hidden state."""
-    # This loop handles cases where the AI might take multiple actions in a row
-    while gs.winner is None and gs.me.player_type.startswith("computer_ai"):
-        current_ai = hero_ai if gs.me.name == "hero" else monster_ai
-        
-        choice_number, new_rnn_state = current_ai.sample_action(gs, prev_rnn_state, training=False)
-        prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
-
-        action = create_action(gs, choice_number)
-        action.enact() # This function modifies gs in place
-
-    return gs, new_rnn_state
 
 def get_display_info(gs):
     """Packages all relevant GameState data into a dictionary for the template."""
@@ -165,6 +149,32 @@ def get_available_actions(gs):
     
     return actions
 
+def take_ai_turn(gs, prev_rnn_state):
+    """Processes the AI's turn, managing its hidden state."""
+    # This loop handles cases where the AI might take multiple actions in a row
+    while gs.winner is None and gs.me.player_type.startswith("computer"):
+        if gs.me.player_type in ["computer_ai", "computer_mind_controlled"]:
+            if gs.me.player_type == "computer_mind_controlled":
+                print("Player is Mind Controlled")
+
+            current_ai = hero_ai if gs.me.name == "hero" else monster_ai
+            
+            choice_number, new_rnn_state = current_ai.sample_action(gs, prev_rnn_state, training=False)
+            prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
+
+            action = create_action(gs, choice_number)
+            action.enact() # This function modifies gs in place
+
+        elif gs.me.player_type == "computer_random":
+            while True:
+                choice_number = randint(0, num_actions - 2)
+                action = create_action(gs, choice_number)
+                legal, reason = action.enact()
+                if legal:
+                    break
+
+    return gs, new_rnn_state
+
 @app.route("/")
 def choice_screen():
     # Pop the winner from the session if it exists, so it only shows once.
@@ -175,18 +185,34 @@ def choice_screen():
 def start_game():
     """Initializes a new game based on the user's role choice."""
     user_role = request.args.get("role")
+    difficulty = int(request.args.get("difficulty", 0)) 
 
-    if user_role == 'hero':
+    hero_mcontrol, monster_mcontrol = False, False
+    if user_role == "hero":
         hero_player_type, monster_player_type = "person", "computer_ai"
-
-    elif user_role == 'monster':
+        if difficulty in [1, 2]:  # Shuffle Mind Control into enemy deck for higher difficulty
+            hero_mcontrol, monster_mcontrol = False, True
+            print("Shuffled in Mind Control")
+    elif user_role == "monster":
         hero_player_type, monster_player_type = "computer_ai", "person"
+        if difficulty in [1, 2]:
+            hero_mcontrol, monster_mcontrol = True, False
+            print("Shuffled in Mind Control")
     else:
         return redirect(url_for("choice_screen"))
     
-    hero_deck, monster_deck = build_decks()
+    hero_deck, monster_deck = build_decks(hero_mcontrol, monster_mcontrol)
     hero = Player("hero", hero_deck, hero_player_type)
     monster = Player("monster", monster_deck, monster_player_type)
+
+    # Difficulty adjustment: add power savings for Hard mode
+    monster.game_mode = 0
+    hero.game_mode = 0
+    if difficulty == 2:
+        if user_role == "hero":
+            monster.game_mode = 1
+        else:
+            hero.game_mode = 1
     
     going_first = "hero" if random.randint(0, 1) == 1 else "monster"
     if going_first == "hero":
@@ -194,7 +220,7 @@ def start_game():
     else:
         monster.going_first = True
     
-    gs = GameState(hero, monster, going_first, PHASE_AWAITING_INPUT, cache=[], game_mode=0)
+    gs = GameState(hero, monster, going_first, PHASE_AWAITING_INPUT, cache=[])
     gs.hero.shuffle()
     gs.monster.shuffle()
     gs.hero.draw(4)
