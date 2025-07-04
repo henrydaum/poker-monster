@@ -186,7 +186,8 @@ def take_ai_turn(gs, prev_rnn_state):
 @app.route("/")
 def choice_screen():
     # Pop the winner from the session if it exists, so it only shows once.
-    backgrounds_path = os.path.join(app.static_folder, 'backgrounds')
+    static_folder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    backgrounds_path = os.path.join(static_folder_path, 'backgrounds')
     
     # Get a list of all image files in that folder
     try:
