@@ -1,6 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, session, request
 from flask_session import Session
 from datetime import timedelta
+import os
 import torch
 import random
 import re
@@ -131,23 +132,23 @@ def get_available_actions(gs):
             extra_info = ""
             action_name = type(action).__name__  # Get the class name
             if action_name in "SelectFromHand":
-                extra_info = f": {action.resolving_card.name}" if action.card_list else ""
+                extra_info = f"- {action.resolving_card.name}" if action.card_list else ""
             if action_name == "SelectFromBattlefield":
-                extra_info = f": {action.target.name}" if action.card_list else ""
+                extra_info = f"- {action.target.name}" if action.card_list else ""
             if action_name == "SelectFromOwnBattlefield":
-                extra_info = f": {action.sacrifice.name}" if action.card_list else ""
+                extra_info = f"- {action.sacrifice.name}" if action.card_list else ""
             if action_name == "SelectFromOppHand":
-                extra_info = f": {action.discard.name}" if action.card_list else ""
+                extra_info = f"- {action.discard.name}" if action.card_list else ""
             if action_name == "SelectFromDeckTop2":
-                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
             if action_name == "SelectFromGraveyard":
-                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
             if action_name == "SelectFromDeck":
-                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
             if action_name == "SelectFromUltimatum":
-                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
             if action_name == "SelectFromDeckTop3":
-                extra_info = f": {action.selected_card.name}" if action.card_list else ""
+                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
             total_string = add_spaces(action_name) + " " + extra_info
             actions.append({"id": action_id, "name": total_string})
         elif error != ERROR_INVALID_SELECTION:  # QOL, error invalid shows up too often and don't need to see it
@@ -185,8 +186,20 @@ def take_ai_turn(gs, prev_rnn_state):
 @app.route("/")
 def choice_screen():
     # Pop the winner from the session if it exists, so it only shows once.
+    backgrounds_path = os.path.join(app.static_folder, 'backgrounds')
+    
+    # Get a list of all image files in that folder
+    try:
+        background_images = [f for f in os.listdir(backgrounds_path) if f.endswith(('.png', '.jpg', '.jpeg'))]
+        # Choose one random image from the list
+        random_background = random.choice(background_images) if background_images else None
+    except FileNotFoundError:
+        random_background = None
+        print("Warning: 'static/backgrounds' folder not found.")
+    
     winner = session.pop('winner', None)
-    return render_template('index.html', winner=winner)
+    
+    return render_template('index.html', winner=winner, background_image=random_background)
 
 @app.route("/start_game")
 def start_game():

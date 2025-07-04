@@ -7,7 +7,7 @@
     <title>Poker Monster</title>
     <style>
         body { font-family: sans-serif; background-color: #ffffff; color: #000000; 
-        background-image: url("{{ url_for('static', filename='background.jpg') }}");
+        background-image: url("{{ url_for('static', filename='background1.jpg') }}");
         background-size: cover; /* This makes the image cover the whole screen */
         background-repeat: no-repeat; /* This prevents the image from tiling */
         background-attachment: fixed; /* This keeps the image in place when scrolling */}
@@ -34,8 +34,8 @@
         .board { display: flex; justify-content: space-around; gap: 20px; }
         .player-column { width: 35%; }
         .actions-column { width: 30%; }
-        .zone { background-color: white; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 15px; padding: 15px; }
-        .zone h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .zone { background-color: white; border: 0px solid #ddd; border-radius: 4px; margin-bottom: 15px; padding: 15px; }
+        .zone h3 { margin-top: 0; border-bottom: 0px solid #eee; padding-bottom: 10px; }
         .card { background-color: #efefef; padding: 5px 8px; border-radius: 4px; margin: 4px 0; }
         .stats p { margin: 5px 0; font-weight: bold; }
         .special-info { text-align: center; font-weight: bold; color: #7d002e; margin: 10px 0; padding: 5px; background-color: #f2dede; border-radius: 4px; }
@@ -80,7 +80,7 @@
             display: none;   /* Hidden by default */
             padding: 5px;
             background: #fff;
-            border: 2px solid #333;
+            border: 0.5px solid #333;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             z-index: 1000; /* Stays on top of everything */

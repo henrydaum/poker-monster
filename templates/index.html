@@ -6,8 +6,12 @@
     <title>Poker Monster</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}?v=2">
     <style>
-        body { font-family: sans-serif; text-align: center; padding-top: 50px; }
-        .container { max-width: 600px; margin: auto; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        body { font-family: sans-serif; text-align: center; padding-top: 50px; 
+                background-image: url("{{ url_for('static', filename='backgrounds/' + background_image) }}");
+                background-size: cover;
+                background-repeat: no-repeat;
+                background-attachment: fixed; }
+        .container { max-width: 600px; margin: auto; padding: 20px;  background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .winner-announcement { font-size: 36px; font-weight: bold; margin-bottom: 20px; }
         .choice-box a, .restart-button a {
             display: inline-block;
@@ -50,7 +54,7 @@
                     <option value="2">Hard</option>
                 </select>
             </div>
-            <h5>Easy: the way the game is meant to be played.<br>Medium gives your opponent the Mind Control card.<br>Hard gives your opponent Mind Control and excessive power. Good Luck.</h5>
+            <h5>Easy is the game in its purest form.</h5>
         {% endif %}
     </div>
 
