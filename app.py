@@ -186,12 +186,12 @@ def take_ai_turn(gs, prev_rnn_state):
 @app.route("/")
 def choice_screen():
     # Pop the winner from the session if it exists, so it only shows once.
-    static_folder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-    backgrounds_path = os.path.join(static_folder_path, 'backgrounds')
+    static_folder_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+    backgrounds_path = os.path.join(static_folder_path, "backgrounds")
     
     # Get a list of all image files in that folder
     try:
-        background_images = [f for f in os.listdir(backgrounds_path) if f.endswith(('.png', '.jpg', '.jpeg'))]
+        background_images = [f for f in os.listdir(backgrounds_path) if f.endswith((".png", ".jpg", ".jpeg"))]
         # Choose one random image from the list
         random_background = random.choice(background_images) if background_images else None
     except FileNotFoundError:
@@ -199,6 +199,8 @@ def choice_screen():
         print("Warning: 'static/backgrounds' folder not found.")
     
     winner = session.pop('winner', None)
+
+    session["background_image"] = random_background
     
     return render_template('index.html', winner=winner, background_image=random_background)
 
@@ -206,7 +208,7 @@ def choice_screen():
 def start_game():
     """Initializes a new game based on the user's role choice."""
     user_role = request.args.get("role")
-    difficulty = int(request.args.get("difficulty", 0)) 
+    difficulty = int(request.args.get("difficulty", 0))
 
     hero_mcontrol, monster_mcontrol = False, False
     if user_role == "hero":
@@ -269,6 +271,7 @@ def game():
     gs = GameState.from_dict(session["gs"])
 
     if gs.winner:
+        session.pop('background_image', None) # Clear background on game over
         session['winner'] = gs.winner
         return redirect(url_for("choice_screen"))
 
@@ -281,8 +284,10 @@ def game():
     # Get the necessary info to display
     game_info = get_display_info(gs)
     available_actions = get_available_actions(gs)
+
+    background_image = session.get('background_image', '')
     
-    return render_template("game.html", info=game_info, actions=available_actions, player_role=player_role_class)
+    return render_template("game.html", info=game_info, actions=available_actions, player_role=player_role_class, background_image=background_image)
 
 @app.route("/submit_action", methods=["POST"])
 def submit_action():
