@@ -462,6 +462,7 @@ class Player:
             "player_type": self.player_type,
             "action_number": self.action_number,
             "game_mode": self.game_mode,
+            "is_mind_controlled": self.is_mind_controlled,
 
             # Create a list of nested card dictionaries for each card zone
             "hand": [card.to_dict() for card in self.hand],
@@ -488,6 +489,7 @@ class Player:
         player.player_type = data["player_type"]
         player.action_number = data["action_number"]
         player.game_mode = data["game_mode"]
+        player.is_mind_controlled = data["is_mind_controlled"]
 
         # Rebuild the card lists using Card.from_dict()
         player.hand = [Card.from_dict(card_data) for card_data in data["hand"]]
@@ -1903,10 +1905,22 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
     x += [len(gs.me.battlefield)/8 - len(gs.opp.battlefield)/8]
     x += [gs.me.health/29 - gs.opp.health/29]
 
+    # Various ratios
+    x += [gs.me.health / (gs.opp.health + 1e-9)]
+    x += [len(gs.me.hand) / (len(gs.opp.hand) + 1e-9)]
+    x += [len(gs.me.deck) / (len(gs.opp.deck) + 1e-9)]
+    x += [len(gs.me.power_cards) / (len(gs.opp.power_cards) + 1e-9)]
+    x += [len(gs.me.graveyard) / (len(gs.opp.graveyard) + 1e-9)]
+    x += [len(gs.me.battlefield) / (len(gs.opp.battlefield) + 1e-9)]
+
     # Misc.:
     x += [gs.me.health/29, gs.opp.health/29, gs.me.power/6, gs.me.power_plays_left, gs.uncertainty/32, gs.me.action_number/40,
-          int(gs.me.monsters_pawn_buff), int(gs.me.last_stand_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first),
-          gs.turn_number/15, int(gs.card_played_this_turn), int(gs.short_card_played_this_turn), gs.short_term_reward(gs.me.name)]  # Some of these values have been somewhat arbitrarily scaled to around 1 - this should help the AI
+          int(gs.me.monsters_pawn_buff), int(gs.me.last_stand_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first), int(gs.me.is_mind_controlled),
+          gs.turn_number/15, int(gs.card_played_this_turn), int(gs.short_card_played_this_turn), gs.short_term_reward(gs.me.name), gs.long_term_reward(gs.me.name)]  # Some of these values have been somewhat arbitrarily scaled to around 1 - this should help the AI
+
+    # Hand total and average power cost:
+    x += [(sum(card.power_cost for card in gs.me.hand))/6]
+    x += [(sum(card.power_cost for card in gs.me.hand) / (len(gs.me.hand) + 1e-9))/6]
 
     # Damage, deck burn, and lethal potential:
     damage_potential = sum(4 for card in gs.me.hand if card.name == "Poker Face") + sum(2 for card in gs.me.hand if card.name == "Cheap Shot") + sum(5 for card in gs.me.hand if card.name == "Go All In")
@@ -1916,31 +1930,51 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
     x += [deck_burn_potential/16]
     x += [1] if len(gs.opp.deck) <= deck_burn_potential else [0]
 
-    # Heal/damage, deck burn potential (next turn):
+    # Heal/damage, deck burn potential from long cards - me:
     damage_potential = sum(5 for card in gs.me.battlefield if card.name == "A Pearlescent Dragon")  # Heal/damage potential
     x += [damage_potential/29]
     x += [1] if gs.opp.health <= damage_potential else [0]
-    deck_burn_potential = sum(1 for card in gs.me.battlefield if card.name == "A Playful Pixie")  # Burn potential
+    deck_burn_potential = sum(1 for card in gs.me.battlefield if card.name == "A Playful Pixie") + 1  # Burn potential, +1 for start of turn card draw
     x += [deck_burn_potential/16]
     x += [1] if len(gs.opp.deck) <= deck_burn_potential else [0]
 
-    # Hand power cost average:
-    try:
-        x += [(sum(card.power_cost for card in gs.me.hand) / len(gs.me.hand))/6]
-    except:
-        x += [0]
+    # Heal/damage, deck burn potential from long cards - opp:
+    damage_potential = sum(5 for card in gs.opp.battlefield if card.name == "A Pearlescent Dragon")
+    x += [damage_potential/29]
+    x += [1] if gs.me.health <= damage_potential else [0]  # Tells you if you are about to die
+    deck_burn_potential = sum(1 for card in gs.opp.battlefield if card.name == "A Playful Pixie") + 1  # Burn potential
+    x += [deck_burn_potential/16]
+    x += [1] if len(gs.me.deck) <= deck_burn_potential else [0]
 
-    # Power curve - six entries for being able to play cards at each power cost from 0 to 5:
-    max_cost = 5  # Dragon
-    for cost in range(max_cost + 1):
-        playable_move_at_cost = 0
-        if any(c.power_cost == cost for c in gs.me.hand):
-            if gs.me.power >= cost:
-                playable_move_at_cost = 1
-            elif gs.me.monsters_pawn_buff:
-                if any(c.power_cost == cost and c.card_type == "short" for c in gs.me.hand):
-                    playable_move_at_cost = 1
-        x.append(playable_move_at_cost)
+    # Long card kill potential
+    have_target = True if any(long_card.name in ["A Playful Pixie", "A Pearlescent Dragon"] for long_card in gs.opp.battlefield) else False
+    have_card = True if any(card.name == "Poker Face" for card in gs.me.hand) else False
+    x += [1] if (have_target and have_card) else [0]
+
+    have_target = True if any(long_card.name in ["The Sun", "The Moon"] for long_card in gs.opp.battlefield) else False
+    have_card = True if any(card.name == "Cheap Shot" for card in gs.me.hand) else False
+    x += [1] if (have_target and have_card) else [0]
+
+    # Tells you if the cards in your hand are legal to play
+    playable_vector = [0] * len(card_data)  # <-- change this if changing to uid-focused one-hots
+    for card in gs.me.hand:  # This mimics the is_legal for play face-up
+        has_enough_power = card.power_cost <= gs.me.power
+        is_playable = True
+        if any(long_card.name == "The Sun" for long_card in gs.opp.battlefield) and gs.card_played_this_turn:
+            is_playable = False
+        elif card.name == "Noble Sacrifice" and not gs.me.battlefield:
+            is_playable = False
+        elif card.card_type == "short":
+            if gs.me.monsters_pawn_buff:
+                is_playable = True
+            elif not has_enough_power:
+                is_playable = False
+        elif card.card_type == "long":
+            if not has_enough_power:
+                is_playable = False
+        if is_playable:
+            playable_vector[card.card_id] = 1
+    x += playable_vector
 
     # Card-specific reveals:
     if show_reveals:  # This puts all of the situational reveal cards in the same few vector spots, which might not be ideal, but it saves resources.
@@ -1970,9 +2004,15 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
 
     # It's also possible to add the cache to the mix:
     if show_cache:
-        # Note: this does not encode the order of the cache, which can matter. 
-        # Would need to add additional slots if order does matter significantly to the AI.
-        x += encode_1hot(gs.cache)  
+        max_size = 4  # The maximum number is to accomodate Last Stand and Reconsider, which can select 3 cards plus the card itself = 4
+        # This encodes the order of the cache, which does matter.
+        for i in range(max_size):
+            if i < len(gs.cache):
+                card = gs.cache[i]
+                vec = encode_1hot([card])
+            else:
+                vec = [0] * len(card_data)  # <-- change this if changing to uid-focused one-hots
+            x += vec 
 
     # All of the above are mostly essential.
 
@@ -1980,7 +2020,7 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
     return x
 
 
-# ## The Deep Reinforcement, "Long Short-Term Memory", Recurrent Neural Network Itself
+# ## The Deep Reinforcement, "Gated Recurrent Unit", Neural Network Itself
 # 
 # Perhaps the most important formula in this entire 3,000+ lines of code program is the REINFORCE formula: **Loss = -log(prob)\*R**
 # 
@@ -1990,7 +2030,7 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
 # 
 # The way this formula works is it increases the probability that the chosen action will be repeated in a similar situation **if it led to a positive reward** and it *decreases* the probability that the chosen action will be repeated in a similar situation **if it led to a negative reward**. In other words, actions that lead to positive rewards are repeated, while it stops doing actions that are punished. Sort of like training a dog. It will do what you reward, and stop doing what you punish. That puts it a bit harshly, but it gets the point across (the only difference is that all of this is using math).
 # 
-# All of this is done using PyTorch, a very convenient, yet slightly maddening, Python library that lets you set up an artificial neural network. My neural network is a recurrent neural network. I made this decision because my game is extremely cyclical and recursive. It turned out to be a good choice. Specifically, I used a "long short-term memory" network that can remember turns that occurred far in the past.
+# All of this is done using PyTorch, a very convenient, yet slightly maddening, Python library that lets you set up an artificial neural network. My neural network is a recurrent neural network. I made this decision because my game is extremely cyclical and recursive. It turned out to be a good choice. Specifically, I used a "Gated Recurrent Unit" (GRU) network that can remember turns that occurred far in the past.
 # 
 # My network is a deep network because it has four layers: three recurrent layers and one feedforward layer. It works very well and pretty fast. I can train on 2,000 games in about ten minutes, which is about 80,000 learning updates per player. That's usually enough to teach the AI how to play the game to a good degree.
 # 
@@ -2260,7 +2300,7 @@ class Network(nn.Module):
             policy_loss = -logprobs * reward_signals.detach()
             prediction_loss = F.mse_loss(prediction_logits_1st_epoch[:-1], next_input_vectors.squeeze(1).detach())  # prediction_logits has len B-1 (terminal gamestate not available)
             total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean() + self.prediction_loss_coef*prediction_loss.mean()  # Use mean and not sum to avoid favoring short games
-            losses.append(prediction_loss.mean().item())
+            losses.append(total_loss.item())
             # losses.append(self.optimizer.param_groups[0]['lr'])  # To watch learning rates
             self.optimizer.zero_grad()
             total_loss.backward()
@@ -2768,12 +2808,12 @@ hyperparameters = {
     "T_mult": 1,  # Multiply T_0 by this factor every time it restarts (default is 1)
     "eta_min": 1e-6,  # Anneal from lr (above) to this lr
     # Misc. Parameters:
-    "dropout_rate": 0.2,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
+    "dropout_rate": 0.3,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
     "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights.
     "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed.
     "temperature": 2,  # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
-    "entropy_coef": 0.01,  # Higher values slow down learning, increase exploration, and slow convergence.
-    "prediction_loss_coef": 1  # Set to 0 to turn off prediction training (training on predicting the next gamestate)
+    "entropy_coef": 0.015,  # Higher values slow down learning, increase exploration, and slow convergence.
+    "prediction_loss_coef": 1  # Set to 0 to turn off prediction training (training on predicting the next gamestate, also known as making a world model)
 }
 
 game_settings = {
