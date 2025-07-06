@@ -199,6 +199,8 @@ class APLayfulPixie(Card):
         #print("A Playful Pixie effect triggered")
         if gs.opp.deck:
             card = gs.opp.deck.pop(0)
+            if card.name == "Mind Control":  # Prevent stealing this card?
+                ...
             card.owner = gs.me.name
             gs.me.hand.append(card)
 
@@ -2024,6 +2026,7 @@ class Network(nn.Module):
         self.temperature = kwargs["temperature"]
         self.entropy_coef = kwargs["entropy_coef"]
         self.negative_reward_clamp = kwargs["negative_reward_clamp"]
+        self.prediction_loss_coef = kwargs["prediction_loss_coef"]
         # Then network layer architecture:
         self.rnn = nn.GRU(self.input_size, self.rnn_size, num_layers=self.num_rnn_layers, dropout=self.dropout_rate)  # This is the Long-Short-Term Memory recurrant neural network. Has complex internal workings.
         self.ln_rnn = nn.LayerNorm(self.rnn_size)  # Normalize the output of the LSTM
@@ -2032,6 +2035,7 @@ class Network(nn.Module):
         self.ln1 = nn.LayerNorm(self.feedforward_size)  # Normalize the layer's outputs/logits (very helpful since Poker Monster has a lot of randomness)
         self.dropout2 = nn.Dropout(self.dropout_rate)
         self.fc2 = nn.Linear(self.feedforward_size, num_actions-1)  # Actor, or policy head
+        self.fc3 = nn.Linear(self.feedforward_size, self.input_size)  # Predictor head
         # The optimizer and LR scheduler:
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=kwargs["lr"], weight_decay=kwargs["weight_decay"])  # PyTorch's optimizer for the neural network. Adam or AdamW work well.
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=kwargs["T_0"], T_mult=kwargs["T_mult"], eta_min=kwargs["eta_min"])
@@ -2048,7 +2052,7 @@ class Network(nn.Module):
         rnn_output, new_rnn_state = self.rnn(x, prev_rnn_state)  # For LSTM, x shape must be: [seq_length, measure_gs()]. A bit tricky but addressed below before calling forward.
         x1 = self.dropout1(self.ln_rnn(rnn_output[-1]))  # Apply LayerNorm to LSTM output
         x2 = self.dropout2(torch.relu(self.ln1(self.fc1(x1))) + x1)  # Feedforward layer for ln1 and fc1, with residual
-        return self.fc2(x2), new_rnn_state
+        return self.fc2(x2), new_rnn_state, self.fc3(x2)
 
     def reset_memory(self):
         # Since LSTM requires an existing rnn_state, this initializes one with zeros that is used.
@@ -2064,6 +2068,8 @@ class Network(nn.Module):
                     "entropies": [],
                     "logprobs": [],
                     "rnn_states": [h0],
+                    "x_states": [],
+                    "prediction_logits": []
                 }
 
     def tempo_mask(self, gs):
@@ -2104,13 +2110,13 @@ class Network(nn.Module):
             # Retreive previous rnn_state
             prev_rnn_state = prev_rnn_state if (prev_rnn_state is not None) else self.memory["rnn_states"][-1]
             # Do forward pass
-            logits, new_rnn_state = self(x, prev_rnn_state)
+            policy_logits, new_rnn_state, prediction_logits = self(x, prev_rnn_state)
             # print(f"Action {len(self.memory['action_ids'])-1} sample logits {logits}")
             # if self.name == "hero" and len(self.memory['action_ids']) == 0:
             #     print(f"SAMPLE Action {len(self.memory['action_ids'])} gs_vector = {gs_vector}")
             #     print(f"SAMPLE Action {len(self.memory['action_ids'])} logits = {logits}")
             # Element-wise vector addition
-            masked_logits = logits + mask
+            masked_logits = policy_logits + mask
             # Apply softmax to get probabilities; lower temp is less random and chaotic and higher temp is more uniform. High temp is good for early game exploration, low temp is good for late game exploitation.
             probs = F.softmax(masked_logits / (self.temperature + 1e-9), dim=0) 
             # Add a small epsilon to try to avoid floating-point/nan errors
@@ -2139,6 +2145,8 @@ class Network(nn.Module):
                 self.memory["entropies"].append(entropy)
                 self.memory["logprobs"].append(logprob)
                 self.memory["rnn_states"].append(new_rnn_state)
+                self.memory["x_states"].append(x)
+                self.memory["prediction_logits"].append(prediction_logits)
 
             return action_id, new_rnn_state
 
@@ -2168,6 +2176,8 @@ class Network(nn.Module):
         tempos = torch.stack(self.memory["tempos"]).to(device)
         entropies = torch.stack(self.memory["entropies"]).to(device)
         logprobs = torch.stack(self.memory["logprobs"]).to(device)
+        prediction_logits_1st_epoch = torch.stack(self.memory["prediction_logits"]).to(device)
+        next_input_vectors = torch.stack([x_state for x_state in self.memory["x_states"][1:]]).to(device)  # len B-1
 
         # Calculating discounted reward signals
         reward_signals = torch.zeros(B).to(device)
@@ -2197,8 +2207,9 @@ class Network(nn.Module):
                 h0 = torch.zeros(self.num_rnn_layers, self.rnn_size).to(device)
                 # Assemble initial hidden state
                 rnn_state = h0
-                # Intialize logits vector
-                logits = []
+                # Intialize logits vectors
+                policy_logits = []
+                prediction_logits = []
                 # Forward pass for every action done again
                 for i in range(B):  # This for loop is very slow. Unfortunately, it cannot be vectorized because of the way recurrent neural networks are.
                     # retreive correct step number
@@ -2207,17 +2218,19 @@ class Network(nn.Module):
                     # Concatenate with tempos and shape for LSTM
                     x = torch.cat((gs_vector, tempos_), dim=0).unsqueeze(0)
                     # Forward using (in-place updating) rnn state and gs_vector for every step
-                    logits_, rnn_state = self(x, rnn_state)
+                    policy_logits_, rnn_state, prediction_logits_ = self(x, rnn_state)
                     # Add to vector, shape [B, num_actions - 1]
-                    logits.append(logits_)
+                    policy_logits.append(policy_logits_)
+                    prediction_logits.append(prediction_logits_)
                     # if self.name == "hero" and i == 0:
                         # print(f"TRAIN Action {i} gs_vector = {gs_vector}")
                         # print(f"TRAIN Action {i} logits = {logits_}")
                     # print(f"Action {i} Training logits: {logits}")
                 # Stack logits
-                logits = torch.stack(logits)
+                policy_logits = torch.stack(policy_logits)
+                prediction_logits = torch.stack(prediction_logits)
                 # Mask logits using previous masks to save resources
-                masked_logits = logits + masks  # [B, num_actions - 1] For this to work, masks needs to have -inf at illegal indexes and 0 everywhere else
+                masked_logits = policy_logits + masks  # [B, num_actions - 1] For this to work, masks needs to have -inf at illegal indexes and 0 everywhere else
                 # Calculate probs like above in get_sample()
                 probs = F.softmax(masked_logits / (self.temperature + 1e-9), dim=1)  # [B, num_actions - 1]
                 # Add a small epsilon to try to avoid floating-point/nan errors
@@ -2226,8 +2239,10 @@ class Network(nn.Module):
                 chosen_action_probs = probs[torch.arange(B), action_ids]  # [B]
                 # Calculate policy loss using REINFORCE formula: -log(prob)*R
                 policy_loss = -torch.log(chosen_action_probs) * reward_signals.detach()  # [B]
+                # Calculate prediction loss
+                prediction_loss = F.mse_loss(prediction_logits[:-1], next_input_vectors.squeeze(1).detach())
                 # Add to total loss
-                total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean()
+                total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean() + self.prediction_loss_coef*prediction_loss.mean()
                 # Append to logger
                 losses.append(total_loss.item())
                 # losses.append(self.optimizer.param_groups[0]['lr'])  # Optional to watch learning rates
@@ -2243,8 +2258,9 @@ class Network(nn.Module):
 
         else:  # For epochs=1 case (much faster vectorization due to no for loops, and less overfitting)
             policy_loss = -logprobs * reward_signals.detach()
-            total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean()  # Use mean and not sum to avoid favoring short games
-            losses.append(total_loss.item())
+            prediction_loss = F.mse_loss(prediction_logits_1st_epoch[:-1], next_input_vectors.squeeze(1).detach())  # prediction_logits has len B-1 (terminal gamestate not available)
+            total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean() + self.prediction_loss_coef*prediction_loss.mean()  # Use mean and not sum to avoid favoring short games
+            losses.append(prediction_loss.mean().item())
             # losses.append(self.optimizer.param_groups[0]['lr'])  # To watch learning rates
             self.optimizer.zero_grad()
             total_loss.backward()
@@ -2522,6 +2538,7 @@ class Main:
         for i in range(best_of):
             opponent_pool = None
 
+            hero_mcontrol, monster_mcontrol = False, False
             # Alternate training between Hero and Monster:
             if i % 2:
                 # Hero is training, Monster is frozen opponent
@@ -2737,9 +2754,9 @@ class Main:
 
 hyperparameters = {
     # Network architecture:
-    "rnn_size": 64,
+    "rnn_size": 128,
     "num_rnn_layers": 2,  # Ignore dropout warning if X=1
-    "feedforward_size": 64,
+    "feedforward_size": 128,
     # Reward shaping:
     "long_term_gamma": 0.95,  # Lower values decay the end-of-game reward to earlier turns faster
     "short_term_gamma": 0.7,
@@ -2755,7 +2772,8 @@ hyperparameters = {
     "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights.
     "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed.
     "temperature": 2,  # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
-    "entropy_coef": 0.01  # Higher values slow down learning, increase exploration, and slow convergence.
+    "entropy_coef": 0.01,  # Higher values slow down learning, increase exploration, and slow convergence.
+    "prediction_loss_coef": 1  # Set to 0 to turn off prediction training (training on predicting the next gamestate)
 }
 
 game_settings = {
