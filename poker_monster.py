@@ -2062,13 +2062,13 @@ class Network(nn.Module):
         self.state_history = deque(maxlen=self.history_length)
         self.transformer_layer = nn.TransformerEncoderLayer(d_model=self.input_size, 
                                                             nhead=kwargs["number_heads"],  # nhead must be a divisor of self.input_size
-                                                            dim_feedforward=self.input_size*4, 
+                                                            dim_feedforward=self.input_size*kwargs["feedforward_dim_coef"], 
                                                             batch_first=True, 
                                                             dropout=self.dropout_rate,
                                                             norm_first=True,
                                                             activation='gelu')
         self.transformer_encoder = nn.TransformerEncoder(self.transformer_layer, num_layers=kwargs["num_transformer_layers"])
-        self.positional_encoding = PositionalEncoding(d_model=self.input_size)
+        self.positional_encoding = PositionalEncoding(d_model=self.input_size, dropout=self.dropout_rate)
         # Misc.:
         self.name = name  # "hero" or "monster"
         self.memory = None  # This will contain various variables and game data that are needed for learning.
@@ -2089,9 +2089,9 @@ class Network(nn.Module):
         self.memory = {
                     "histories": [],
                     "action_ids": [],
+                    "masks": [],
                     "long_term_rewards": [],
                     "short_term_rewards": [],
-                    "masks": [],
                 }
 
     def tempo_mask(self, gs):
@@ -2182,9 +2182,9 @@ class Network(nn.Module):
         # This vectorized approach is must faster for computers to compute, especially on GPUs.
         histories = torch.stack(self.memory["histories"]).to(device)  # [B, measure_gs()] = dims
         action_ids = torch.tensor(self.memory["action_ids"], dtype=torch.long).to(device)  # [B]
+        masks = torch.stack(self.memory["masks"]).to(device)  # [B, num_actions - 1]
         long_rewards = torch.stack(self.memory["long_term_rewards"]).to(device)  # [B]
         short_rewards = torch.stack(self.memory["short_term_rewards"]).to(device)  # [B]
-        masks = torch.stack(self.memory["masks"]).to(device)  # [B, num_actions - 1]
 
         # Calculating discounted reward signals
         reward_signals = torch.zeros(B).to(device)
@@ -2704,9 +2704,10 @@ class Main:
 
 hyperparameters = {
     # Network architecture:
-    "num_transformer_layers": 3,
+    "num_transformer_layers": 2,
     "history_length": 40,
-    "number_heads": 12,  # Must be a divisor of input_size (input_size = measure_gs + num_actions-1)
+    "number_heads": 10,  # Must be a divisor of input_size (input_size = measure_gs + num_actions-1)
+    "feedforward_dim_coef": 3,  # The size of feedforward layers in the transformer are equal to this times input_size
     # Reward shaping:
     "long_term_gamma": 0.95,  # Lower values decay the end-of-game reward to earlier turns faster
     "short_term_gamma": 0.7,
@@ -2717,7 +2718,7 @@ hyperparameters = {
     "T_mult": 1,  # Multiply T_0 by this factor every time it restarts (default is 1)
     "eta_min": 1e-6,  # Anneal from lr (above) to this lr
     # Misc. Parameters:
-    "dropout_rate": 0.3,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
+    "dropout_rate": 0.2,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
     "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights.
     "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed.
     "temperature": 2,  # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
