@@ -199,6 +199,8 @@ class APLayfulPixie(Card):
         #print("A Playful Pixie effect triggered")
         if gs.opp.deck:
             card = gs.opp.deck.pop(0)
+            if card.name == "Mind Control":  # Prevent stealing this card?
+                ...
             card.owner = gs.me.name
             gs.me.hand.append(card)
 
@@ -460,6 +462,7 @@ class Player:
             "player_type": self.player_type,
             "action_number": self.action_number,
             "game_mode": self.game_mode,
+            "is_mind_controlled": self.is_mind_controlled,
 
             # Create a list of nested card dictionaries for each card zone
             "hand": [card.to_dict() for card in self.hand],
@@ -486,6 +489,7 @@ class Player:
         player.player_type = data["player_type"]
         player.action_number = data["action_number"]
         player.game_mode = data["game_mode"]
+        player.is_mind_controlled = data["is_mind_controlled"]
 
         # Rebuild the card lists using Card.from_dict()
         player.hand = [Card.from_dict(card_data) for card_data in data["hand"]]
@@ -1903,7 +1907,7 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
 
     # Misc.:
     x += [gs.me.health/29, gs.opp.health/29, gs.me.power/6, gs.me.power_plays_left, gs.uncertainty/32, gs.me.action_number/40,
-          int(gs.me.monsters_pawn_buff), int(gs.me.last_stand_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first),
+          int(gs.me.monsters_pawn_buff), int(gs.me.last_stand_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first), int(gs.me.is_mind_controlled),
           gs.turn_number/15, int(gs.card_played_this_turn), int(gs.short_card_played_this_turn), gs.short_term_reward(gs.me.name)]  # Some of these values have been somewhat arbitrarily scaled to around 1 - this should help the AI
 
     # Damage, deck burn, and lethal potential:
@@ -1978,7 +1982,7 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
     return x
 
 
-# ## The Deep Reinforcement, "Long Short-Term Memory", Recurrent Neural Network Itself
+# ## The Deep Reinforcement, "Gated Recurrent Unit", Neural Network Itself
 # 
 # Perhaps the most important formula in this entire 3,000+ lines of code program is the REINFORCE formula: **Loss = -log(prob)\*R**
 # 
@@ -1988,7 +1992,7 @@ def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
 # 
 # The way this formula works is it increases the probability that the chosen action will be repeated in a similar situation **if it led to a positive reward** and it *decreases* the probability that the chosen action will be repeated in a similar situation **if it led to a negative reward**. In other words, actions that lead to positive rewards are repeated, while it stops doing actions that are punished. Sort of like training a dog. It will do what you reward, and stop doing what you punish. That puts it a bit harshly, but it gets the point across (the only difference is that all of this is using math).
 # 
-# All of this is done using PyTorch, a very convenient, yet slightly maddening, Python library that lets you set up an artificial neural network. My neural network is a recurrent neural network. I made this decision because my game is extremely cyclical and recursive. It turned out to be a good choice. Specifically, I used a "long short-term memory" network that can remember turns that occurred far in the past.
+# All of this is done using PyTorch, a very convenient, yet slightly maddening, Python library that lets you set up an artificial neural network. My neural network is a recurrent neural network, specifically a GRU network. I made this decision because my game is extremely cyclical and recursive. It turned out to be a good choice. Specifically, I used a "long short-term memory" network that can remember turns that occurred far in the past.
 # 
 # My network is a deep network because it has four layers: three recurrent layers and one feedforward layer. It works very well and pretty fast. I can train on 2,000 games in about ten minutes, which is about 80,000 learning updates per player. That's usually enough to teach the AI how to play the game to a good degree.
 # 
@@ -2002,11 +2006,34 @@ import torch.optim as optim
 import torch.nn.functional as F
 from copy import copy
 from contextlib import nullcontext
+from collections import deque
 
 # To make the AI have the same starting weights and biases every time, do this:
 # torch.manual_seed(0)  
 # Set device to maximize GPU if possible. Doing .to(device) on a tensor sends that information to the GPU if "cuda" is available. However, that data transfer takes a little time.
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.to(device)
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1).to(device)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)).to(device)
+        pe = torch.zeros(max_len, 1, d_model).to(device)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor, shape [batch_size, sequence_length, embedding_dim]
+        """
+        # The stored pe has shape [max_len, 1, d_model]. We slice it and add to x.
+        x = x + self.pe[:x.size(1)].transpose(0, 1)
+        return self.dropout(x)
 
 class Network(nn.Module):
     # Recurrant neural policy network using REINFORCE loss
@@ -2014,56 +2041,57 @@ class Network(nn.Module):
         super().__init__()
         # Hyperparameters at the top:
         self.input_size = measure_gs() + num_actions-1
-        self.rnn_size = kwargs["rnn_size"]   # Number of hidden neurons in the recurrant neural network's internal layers.
-        self.num_rnn_layers = kwargs["num_rnn_layers"]
-        self.feedforward_size = kwargs["feedforward_size"]
         self.dropout_rate = kwargs["dropout_rate"]
         self.long_term_gamma = kwargs["long_term_gamma"]  # Discount factor for long-term reward that only show up at the end of the game, 0.95 seems good, affecting all actions.
         self.short_term_gamma = kwargs["short_term_gamma"]  # Discount factors for short-term rewards that show up during the game and need to dissipate backwards in time quickly.
         self.epochs = kwargs["epochs"]
         self.temperature = kwargs["temperature"]
         self.entropy_coef = kwargs["entropy_coef"]
-        self.negative_reward_clamp = kwargs["negative_reward_clamp"]
         # Then network layer architecture:
-        self.rnn = nn.GRU(self.input_size, self.rnn_size, num_layers=self.num_rnn_layers, dropout=self.dropout_rate)  # This is the Long-Short-Term Memory recurrant neural network. Has complex internal workings.
-        self.ln_rnn = nn.LayerNorm(self.rnn_size)  # Normalize the output of the LSTM
-        self.dropout1 = nn.Dropout(self.dropout_rate)
-        self.fc1 = nn.Linear(self.rnn_size, self.feedforward_size)  # Normal fully-connected feedforward layer.
-        self.ln1 = nn.LayerNorm(self.feedforward_size)  # Normalize the layer's outputs/logits (very helpful since Poker Monster has a lot of randomness)
+        self.fc1 = nn.Linear(self.input_size, self.input_size)  # Normal fully-connected feedforward layer.
+        self.ln1 = nn.LayerNorm(self.input_size)  # Normalize the layer's outputs/logits (very helpful since Poker Monster has a lot of randomness)
         self.dropout2 = nn.Dropout(self.dropout_rate)
-        self.fc2 = nn.Linear(self.feedforward_size, num_actions-1)  # Actor, or policy head
+        self.fc2 = nn.Linear(self.input_size, num_actions-1)  # Actor, or policy head
+        # self.fc3 = nn.Linear(self.input_size, self.input_size)  # Predictor head (test)
         # The optimizer and LR scheduler:
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=kwargs["lr"], weight_decay=kwargs["weight_decay"])  # PyTorch's optimizer for the neural network. Adam or AdamW work well.
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=kwargs["T_0"], T_mult=kwargs["T_mult"], eta_min=kwargs["eta_min"])
         self.use_lr_scheduler = kwargs["use_lr_scheduler"]
+        # Transformer stuff:
+        self.history_length = kwargs["history_length"]
+        self.state_history = deque(maxlen=self.history_length)
+        self.transformer_layer = nn.TransformerEncoderLayer(d_model=self.input_size, 
+                                                            nhead=kwargs["number_heads"],  # nhead must be a divisor of self.input_size
+                                                            dim_feedforward=self.input_size*4, 
+                                                            batch_first=True, 
+                                                            dropout=self.dropout_rate,
+                                                            norm_first=True,
+                                                            activation='gelu')
+        self.transformer_encoder = nn.TransformerEncoder(self.transformer_layer, num_layers=kwargs["num_transformer_layers"])
+        self.positional_encoding = PositionalEncoding(d_model=self.input_size)
         # Misc.:
         self.name = name  # "hero" or "monster"
         self.memory = None  # This will contain various variables and game data that are needed for learning.
         self.reset_memory()  # (This clears and initializes the memory)
         self.num_params = sum(p.numel() for p in self.parameters())  # Total number of parameters (network size)
-        self.to(device)
 
-    def forward(self, x, prev_rnn_state):
-        # Forward pass of the neural network. This produces the main outputs for the network but this is not called directly from main(). Instead, sample_action is called.
-        rnn_output, new_rnn_state = self.rnn(x, prev_rnn_state)  # For LSTM, x shape must be: [seq_length, measure_gs()]. A bit tricky but addressed below before calling forward.
-        x1 = self.dropout1(self.ln_rnn(rnn_output[-1]))  # Apply LayerNorm to LSTM output
-        x2 = self.dropout2(torch.relu(self.ln1(self.fc1(x1))) + x1)  # Feedforward layer for ln1 and fc1, with residual
-        return self.fc2(x2), new_rnn_state
+        self.to(device)  # Put this last
+
+    def forward(self, x_history):
+        # Transformer stuff:
+        x = self.positional_encoding(x_history)
+        transformer_output = self.transformer_encoder(x)
+        latest_turn_output = transformer_output[:, -1, :]
+        feedforward_out = self.dropout2(F.gelu(self.ln1(self.fc1(latest_turn_output))) + latest_turn_output)  # With residual and gelu
+        return self.fc2(feedforward_out)
 
     def reset_memory(self):
-        # Since LSTM requires an existing rnn_state, this initializes one with zeros that is used.
-        h0 = torch.zeros(self.num_rnn_layers, self.rnn_size).to(device)
-        # Also (re)establish the memory with the rnn_state:
         self.memory = {
-                    "gs_vectors": [],
+                    "histories": [],
                     "action_ids": [],
                     "long_term_rewards": [],
                     "short_term_rewards": [],
                     "masks": [],
-                    "tempos": [],
-                    "entropies": [],
-                    "logprobs": [],
-                    "rnn_states": [h0],
                 }
 
     def tempo_mask(self, gs):
@@ -2085,13 +2113,12 @@ class Network(nn.Module):
         # Return masked logits
         return mask, tempos  # Save mask for training since making actions is intensive and saving gs is a bad idea
 
-    def sample_action(self, gs, prev_rnn_state=None, training=False):
+    def sample_action(self, gs, training):
         # This is the main function that is called from the main loop (outside here) to get an action based on NN inference.
         # Input a gamestate (gs), returns an action_id (an integer).
-        ctx = torch.inference_mode() if (self.epochs > 1 or training==False) else nullcontext()
-        # This part turns off gradient calculations, since all of this will be recomputed in train(). Can also use 'with torch.no_grad():'. To speed things up. Also disables dropout.
+        ctx = torch.inference_mode() if training==False else nullcontext()  # Turn off gradient calculations and dropout if not training
         with ctx:
-            # Get mask + simulated tempos (and save mask for later training)
+            # At the start, get mask + simulated tempos (and save mask for later training)
             mask, tempos = self.tempo_mask(gs)
             # Get gs_vector
             gs_vector = gs_to_vector(gs)
@@ -2099,16 +2126,17 @@ class Network(nn.Module):
             x = torch.tensor(gs_vector, dtype=torch.float32).to(device)
             # Concatenate x with possible tempos
             x = torch.cat((x, tempos), dim=0)
-            # Reshape for rnn
-            x = x.unsqueeze(0)
-            # Retreive previous rnn_state
-            prev_rnn_state = prev_rnn_state if (prev_rnn_state is not None) else self.memory["rnn_states"][-1]
-            # Do forward pass
-            logits, new_rnn_state = self(x, prev_rnn_state)
-            # print(f"Action {len(self.memory['action_ids'])-1} sample logits {logits}")
-            # if self.name == "hero" and len(self.memory['action_ids']) == 0:
-            #     print(f"SAMPLE Action {len(self.memory['action_ids'])} gs_vector = {gs_vector}")
-            #     print(f"SAMPLE Action {len(self.memory['action_ids'])} logits = {logits}")
+            # Add the current state to the history
+            self.state_history.append(x)
+            # Turn history to list, in preparation
+            history_list = list(self.state_history)
+            # If history isn't full, fill with zeros (happens once per game)
+            while len(history_list) < self.history_length:
+                history_list.insert(0, torch.zeros_like(x))
+            # Stack the history tensor for transformer
+            history_tensor = torch.stack(history_list).unsqueeze(0)
+            # Forward pass:
+            logits = self(history_tensor.to(device)).squeeze()
             # Element-wise vector addition
             masked_logits = logits + mask
             # Apply softmax to get probabilities; lower temp is less random and chaotic and higher temp is more uniform. High temp is good for early game exploration, low temp is good for late game exploitation.
@@ -2117,30 +2145,22 @@ class Network(nn.Module):
             probs = probs.clamp(min=1e-9)
             # Create distribution from softmax probabilities
             dist = torch.distributions.Categorical(probs=probs)  # Not a tensor
-            # Get entropy for later (increases exploration)
-            entropy = dist.entropy()
             # Get a random sample (sample size=1); dist.sample returns the index of the sampled value. This is a Monte-Carlo approach to learning.
             sample = dist.sample()  # Tensor
-            if gs.me.player_type == "computer_mind_control":
+            if gs.me.player_type == "computer_mind_control":  # If Mind Controlled, choose the worst option.
                 mind_controlled_logits = masked_logits.clone()
                 mind_controlled_logits[mind_controlled_logits == float('-inf')] = float('inf')  # Fix to enable a safe argmin
                 action_id = torch.argmin(mind_controlled_logits).item()
             else:
                 # Convert to integer
                 action_id = sample.item()
-            # Calculate logprob for training when epochs=1
-            logprob = torch.log(probs[action_id])
+
             # Save important data to memory for training
             if training:
-                self.memory["gs_vectors"].append(torch.tensor(copy(gs_vector), dtype=torch.float32))  # Must copy
+                self.memory["histories"].append(history_tensor.squeeze(0))
                 self.memory["action_ids"].append(torch.tensor(action_id, dtype=torch.long))
                 self.memory["masks"].append(mask)
-                self.memory["tempos"].append(tempos)
-                self.memory["entropies"].append(entropy)
-                self.memory["logprobs"].append(logprob)
-                self.memory["rnn_states"].append(new_rnn_state)
-
-            return action_id, new_rnn_state
+            return action_id
 
     def train_network(self, epochs=1):
         # This is the training loop that is called after the game is over, data has been collected, and there is a winner (or tie)
@@ -2160,14 +2180,11 @@ class Network(nn.Module):
         # These are vectorized representations for every step, retreived from memory.
         # For example, gs_vectors[0] is the gs_vector for the 0th action.
         # This vectorized approach is must faster for computers to compute, especially on GPUs.
-        gs_vectors = torch.stack(self.memory["gs_vectors"]).to(device)  # [B, measure_gs()] = dims
+        histories = torch.stack(self.memory["histories"]).to(device)  # [B, measure_gs()] = dims
         action_ids = torch.tensor(self.memory["action_ids"], dtype=torch.long).to(device)  # [B]
         long_rewards = torch.stack(self.memory["long_term_rewards"]).to(device)  # [B]
         short_rewards = torch.stack(self.memory["short_term_rewards"]).to(device)  # [B]
         masks = torch.stack(self.memory["masks"]).to(device)  # [B, num_actions - 1]
-        tempos = torch.stack(self.memory["tempos"]).to(device)
-        entropies = torch.stack(self.memory["entropies"]).to(device)
-        logprobs = torch.stack(self.memory["logprobs"]).to(device)
 
         # Calculating discounted reward signals
         reward_signals = torch.zeros(B).to(device)
@@ -2180,70 +2197,22 @@ class Network(nn.Module):
             short_discounted_sum = short_rewards[t] + self.short_term_gamma*short_discounted_sum
             # Their sum equals a reward signal
             reward_signals[t] = long_discounted_sum + short_discounted_sum
-        # Clamp negative rewards to make them less punishing
-        # reward_signals = reward_signals.clamp(min=self.negative_reward_clamp)
 
-        # print(f"Num rewards: {len(reward_signals)}")
         # for reward in reward_signals:
         #     print(f"{self.name} Reward signal: {reward.item()}")
         # print(f"Cumulative Reward: {reward_signals.sum().item():.2f} {self.name}")
 
         # Vectorized learning:
-        if self.epochs > 1:
-            for epoch in range(self.epochs):
-                self.memory["rnn_states"] = []
-                # Recomputing ALL rnn forward passes
-                # Remake h0 and c0
-                h0 = torch.zeros(self.num_rnn_layers, self.rnn_size).to(device)
-                # Assemble initial hidden state
-                rnn_state = h0
-                # Intialize logits vector
-                logits = []
-                # Forward pass for every action done again
-                for i in range(B):  # This for loop is very slow. Unfortunately, it cannot be vectorized because of the way recurrent neural networks are.
-                    # retreive correct step number
-                    gs_vector = gs_vectors[i]
-                    tempos_ = tempos[i]
-                    # Concatenate with tempos and shape for LSTM
-                    x = torch.cat((gs_vector, tempos_), dim=0).unsqueeze(0)
-                    # Forward using (in-place updating) rnn state and gs_vector for every step
-                    logits_, rnn_state = self(x, rnn_state)
-                    # Add to vector, shape [B, num_actions - 1]
-                    logits.append(logits_)
-                    # if self.name == "hero" and i == 0:
-                        # print(f"TRAIN Action {i} gs_vector = {gs_vector}")
-                        # print(f"TRAIN Action {i} logits = {logits_}")
-                    # print(f"Action {i} Training logits: {logits}")
-                # Stack logits
-                logits = torch.stack(logits)
-                # Mask logits using previous masks to save resources
-                masked_logits = logits + masks  # [B, num_actions - 1] For this to work, masks needs to have -inf at illegal indexes and 0 everywhere else
-                # Calculate probs like above in get_sample()
-                probs = F.softmax(masked_logits / (self.temperature + 1e-9), dim=1)  # [B, num_actions - 1]
-                # Add a small epsilon to try to avoid floating-point/nan errors
-                probs = probs.clamp(min=1e-9)
-                # Find probabilities of choosing the chosen actions using vectorized math and saved action_ids
-                chosen_action_probs = probs[torch.arange(B), action_ids]  # [B]
-                # Calculate policy loss using REINFORCE formula: -log(prob)*R
-                policy_loss = -torch.log(chosen_action_probs) * reward_signals.detach()  # [B]
-                # Add to total loss
-                total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean()
-                # Append to logger
-                losses.append(total_loss.item())
-                # losses.append(self.optimizer.param_groups[0]['lr'])  # Optional to watch learning rates
-                # losses.append(rewards[-1])
-                # Begin PyTorch gradient descent learning algorithm
-                self.optimizer.zero_grad()
-                # Backpropagate using total_loss
-                total_loss.backward()
-                # Clip exploding gradients (especially important for LSTM or RNN networks)
-                torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
-                # Apply changes
-                self.optimizer.step()
-
-        else:  # For epochs=1 case (much faster vectorization due to no for loops, and less overfitting)
-            policy_loss = -logprobs * reward_signals.detach()
-            total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean()  # Use mean and not sum to avoid favoring short games
+        for epoch in range(self.epochs):
+            logits = self(histories)
+            masked_logits = logits + masks
+            probs = F.softmax(masked_logits / (self.temperature + 1e-9), dim=1)
+            probs = probs.clamp(min=1e-9)
+            dists = torch.distributions.Categorical(probs=probs)
+            entropies = dists.entropy()
+            chosen_action_probs = probs[torch.arange(B), action_ids]
+            policy_loss = -torch.log(chosen_action_probs) * reward_signals.detach()
+            total_loss = policy_loss.mean() - self.entropy_coef * entropies.mean()
             losses.append(total_loss.item())
             # losses.append(self.optimizer.param_groups[0]['lr'])  # To watch learning rates
             self.optimizer.zero_grad()
@@ -2266,10 +2235,8 @@ class Network(nn.Module):
         directory = os.getcwd()
         # Create the full file path by joining the directory and filename
         file_path = os.path.join(directory, f"ai_weights_{name}.pth")
-
         # Save the model
         torch.save(self.state_dict(), file_path)
-
         # Print the full, unambiguous path
         print(f"Saved PyTorch model to: {file_path}")
 
@@ -2292,7 +2259,6 @@ class Network(nn.Module):
 
 from numpy import mean
 from random import randint
-from collections import deque
 import matplotlib.pyplot as plt
 import pandas as pd
 import time
@@ -2391,9 +2357,9 @@ class Main:
                     # For a computer AI:
                     elif gs.me.player_type in ["computer_ai", "computer_mind_control"]:
                         if gs.me.name == "hero":
-                            choice_number, _ = me_ai.sample_action(gs, training=train_hero)
+                            choice_number = me_ai.sample_action(gs, training=train_hero)
                         elif gs.me.name == "monster":
-                            choice_number, _ = me_ai.sample_action(gs, training=train_monster)
+                            choice_number = me_ai.sample_action(gs, training=train_monster)
                     # Create the action
                     action = create_action(gs, choice_number)
                     # Test if legal
@@ -2522,6 +2488,7 @@ class Main:
         for i in range(best_of):
             opponent_pool = None
 
+            hero_mcontrol = False; monster_mcontrol = False
             # Alternate training between Hero and Monster:
             if i % 2:
                 # Hero is training, Monster is frozen opponent
@@ -2737,13 +2704,12 @@ class Main:
 
 hyperparameters = {
     # Network architecture:
-    "rnn_size": 64,
-    "num_rnn_layers": 2,  # Ignore dropout warning if X=1
-    "feedforward_size": 64,
+    "num_transformer_layers": 3,
+    "history_length": 40,
+    "number_heads": 12,  # Must be a divisor of input_size (input_size = measure_gs + num_actions-1)
     # Reward shaping:
     "long_term_gamma": 0.95,  # Lower values decay the end-of-game reward to earlier turns faster
     "short_term_gamma": 0.7,
-    "negative_reward_clamp": float('-inf'),  # Clamp negative rewards to this value to make them less punishing. All rewards below this value are set to this value (set to float('-inf') to disable)
     # Learning rate parameters (LR scheduler):
     "lr":1e-3,  # For 5 or more epochs, use 1e-4; for 1 epoch use 1e-3 (no scheduler)
     "use_lr_scheduler": True,  # lr scheduler (cosine annealing)
@@ -2751,7 +2717,7 @@ hyperparameters = {
     "T_mult": 1,  # Multiply T_0 by this factor every time it restarts (default is 1)
     "eta_min": 1e-6,  # Anneal from lr (above) to this lr
     # Misc. Parameters:
-    "dropout_rate": 0.2,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
+    "dropout_rate": 0.3,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
     "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights.
     "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed.
     "temperature": 2,  # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
