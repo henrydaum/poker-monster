@@ -161,13 +161,10 @@ def take_ai_turn(gs, prev_rnn_state):
     """Processes the AI's turn, managing its hidden state."""
     # This loop handles cases where the AI might take multiple actions in a row
     while gs.winner is None and gs.me.player_type.startswith("computer"):
-        if gs.me.player_type in ["computer_ai", "computer_mind_control"]:
-            if gs.me.player_type == "computer_mind_control":
-                print("Player is Mind Controlled")
-
+        if gs.me.player_type in ["computer_ai"]:
             current_ai = hero_ai if gs.me.name == "hero" else monster_ai
             
-            choice_number, new_rnn_state = current_ai.sample_action(gs, prev_rnn_state, training=False)
+            choice_number, new_rnn_state, _ = current_ai.sample_action(gs, prev_rnn_state, training=False)
             prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
 
             action = create_action(gs, choice_number)
@@ -210,21 +207,14 @@ def start_game():
     user_role = request.args.get("role")
     difficulty = int(request.args.get("difficulty", 0))
 
-    hero_mcontrol, monster_mcontrol = False, False
     if user_role == "hero":
         hero_player_type, monster_player_type = "person", "computer_ai"
-        if difficulty in [1, 2]:  # Shuffle Mind Control into enemy deck for higher difficulty
-            hero_mcontrol, monster_mcontrol = False, True
-            print("Shuffled in Mind Control")
     elif user_role == "monster":
         hero_player_type, monster_player_type = "computer_ai", "person"
-        if difficulty in [1, 2]:
-            hero_mcontrol, monster_mcontrol = True, False
-            print("Shuffled in Mind Control")
     else:
         return redirect(url_for("choice_screen"))
     
-    hero_deck, monster_deck = build_decks(hero_mcontrol, monster_mcontrol)
+    hero_deck, monster_deck = build_decks()
     hero = Player("hero", hero_deck, hero_player_type)
     monster = Player("monster", monster_deck, monster_player_type)
 
@@ -296,11 +286,16 @@ def submit_action():
     
     # Load state from session
     gs = GameState.from_dict(session["gs"])
-    rnn_state = deserialize_rnn_state(session.get("rnn_state"))
+    prev_rnn_state = deserialize_rnn_state(session.get("rnn_state"))
 
     # Get action_id from the form submission
     action_id = int(request.form["action_id"])
     print(f"Action ID chosen: {action_id}")
+
+    # Before enacting, give AI a chance to predict your move:
+    opp_ai = monster_ai if gs.me.name == "hero" else hero_ai
+    _, new_rnn_state, _ = opp_ai.sample_action(gs, training=False, prev_rnn_state=prev_rnn_state, predicting=True)
+    rnn_state = new_rnn_state
 
     # Execute the user's action
     action = create_action(gs, action_id)

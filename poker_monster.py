@@ -42,10 +42,7 @@ monster_card_data = [
     (3, "Peek", "monster", 1, "short", None, "Look at the top 2 cards of your deck and put one into your hand, and the other on the bottom of your deck."),
 ]
 
-# New card, used to increase the difficulty:
-mind_control_data = (1, "Mind Control", "either", 4, "short", None, "You control your opponent's next turn. (This card cannot be discarded or stolen.)")
-
-card_data = hero_card_data + monster_card_data + [mind_control_data]  # Comment out '+ [mind_control_data]' to remove it from the game
+card_data = monster_card_data + hero_card_data  # Monster is first to make input vector creation easier
 
 num_cards = 0
 
@@ -199,8 +196,6 @@ class APLayfulPixie(Card):
         #print("A Playful Pixie effect triggered")
         if gs.opp.deck:
             card = gs.opp.deck.pop(0)
-            if card.name == "Mind Control":  # Prevent stealing this card?
-                ...
             card.owner = gs.me.name
             gs.me.hand.append(card)
 
@@ -306,12 +301,6 @@ class Peek(Card):
         gs.me.deck.append(deck_top2[0])  # Put the other card on the bottom.
         # Don't forget to get the index!
 
-class MindControl(Card):
-    def effect(self, gs):
-        # print("Playing Mind Control")
-        gs.opp.is_mind_controlled = True
-        gs.opp.player_type = "computer_mind_control"
-
 
 # ## The Player Class
 # 
@@ -348,10 +337,8 @@ class Player:
         self.monsters_pawn_buff = False
         self.going_first = False
         self.player_type = player_type # "person" or "computer" - being a computer means being unable to cancel actions or view card info
-        self.starting_player_type = player_type  # For Mind Control
         self.action_number = 0
         self.game_mode = 0  # 0 is normal mode, 1 is "Power Trip" mode - power carries over at the end of the turn. Used to increase difficulty.
-        self.is_mind_controlled = False
 
     def start_turn(self, gs):
         self.last_turn_log = []
@@ -376,10 +363,6 @@ class Player:
             self.power = 0
         elif gs.turn_number == 0:
             self.power = 0
-        if self.is_mind_controlled == True:
-            self.player_type = self.starting_player_type
-            self.is_mind_controlled = False
-            # print("Mind control stopped")
         gs.pass_priority()
 
     def draw(self, qty=1):
@@ -462,7 +445,6 @@ class Player:
             "player_type": self.player_type,
             "action_number": self.action_number,
             "game_mode": self.game_mode,
-            "is_mind_controlled": self.is_mind_controlled,
 
             # Create a list of nested card dictionaries for each card zone
             "hand": [card.to_dict() for card in self.hand],
@@ -489,14 +471,13 @@ class Player:
         player.player_type = data["player_type"]
         player.action_number = data["action_number"]
         player.game_mode = data["game_mode"]
-        player.is_mind_controlled = data["is_mind_controlled"]
 
         # Rebuild the card lists using Card.from_dict()
-        player.hand = [Card.from_dict(card_data) for card_data in data["hand"]]
-        player.deck = [Card.from_dict(card_data) for card_data in data["deck"]]
-        player.battlefield = [Card.from_dict(card_data) for card_data in data["battlefield"]]
-        player.graveyard = [Card.from_dict(card_data) for card_data in data["graveyard"]]
-        player.power_cards = [Card.from_dict(card_data) for card_data in data["power_cards"]]
+        player.hand = [Card.from_dict(c_data) for c_data in data["hand"]]
+        player.deck = [Card.from_dict(c_data) for c_data in data["deck"]]
+        player.battlefield = [Card.from_dict(c_data) for c_data in data["battlefield"]]
+        player.graveyard = [Card.from_dict(c_data) for c_data in data["graveyard"]]
+        player.power_cards = [Card.from_dict(c_data) for c_data in data["power_cards"]]
 
         return player
 
@@ -615,7 +596,27 @@ class GameState:
         if not any(long_card.name == "Monster's Pawn" for long_card in self.opp.battlefield):
             self.opp.monsters_pawn_buff = 0
 
-    def long_term_reward(self, perspective, tempo_weight=1.0):
+    def short_term_reward(self, name, tempo_weight=1.0):
+        # Short-term rewards are awarded during the entire game, before the game ends.
+        # These rewards need to be indicative of a win or loss. There must be some correlation between these things and winning or losing.
+        hero_reward = 0
+        monster_reward = 0
+
+        # These actions have a smaller gamma, so the reward does not reach back so far. It only reinforces the actions which came immediately before it.
+
+        # Tempo - get rewarded for taking certain actions, such as spending power. These points are awarded in the Actions section of the game engine code.
+        if self.turn_priority == "hero":
+            hero_reward += (self.tempo / 8) * tempo_weight
+        else:
+            monster_reward += (self.tempo / 8) * tempo_weight
+
+        # Return
+        if name == "hero":
+            return hero_reward
+        elif name == "monster":
+            return monster_reward
+
+    def long_term_reward(self, name, tempo_weight=1.0):
         # Reward shaping: assigning rewards to help shape learning outcomes. Sort of like school.
         # Initialize rewards. Long-term rewards are only awarded at the end of the game.
         hero_reward = 0
@@ -646,29 +647,9 @@ class GameState:
         #     print(f"Long card value: {self.long_card_value:.2f} {self.me.name}")
 
         # Return
-        if perspective == "hero":
+        if name == "hero":
             return hero_reward
-        elif perspective == "monster":
-            return monster_reward
-
-    def short_term_reward(self, perspective, tempo_weight=1.0):
-        # Short-term rewards are awarded during the entire game, before the game ends.
-        # These rewards need to be indicative of a win or loss. There must be some correlation between these things and winning or losing.
-        hero_reward = 0
-        monster_reward = 0
-
-        # These actions have a smaller gamma, so the reward does not reach back so far. It only reinforces the actions which came immediately before it.
-
-        # Tempo - get rewarded for taking certain actions, such as spending power. These points are awarded in the Actions section of the game engine code.
-        if self.turn_priority == "hero":
-            hero_reward += (self.tempo / 8) * tempo_weight
-        else:
-            monster_reward += (self.tempo / 8) * tempo_weight
-
-        # Return
-        if perspective == "hero":
-            return hero_reward
-        elif perspective == "monster":
+        elif name == "monster":
             return monster_reward
 
     def to_dict(self):
@@ -677,22 +658,18 @@ class GameState:
             # Call the methods you already wrote for Player
             "hero": self.hero.to_dict(),
             "monster": self.monster.to_dict(),
-
             # Save the simple attributes
             "turn_priority": self.turn_priority,
             "game_phase": self.game_phase,
             "turn_number": self.turn_number,
             "winner": self.winner,
-
             # Flags:
             "card_played_this_turn": self.card_played_this_turn,
             "short_card_played_this_turn": self.short_card_played_this_turn,
-
             # Reward data:
             "tempo": self.tempo,
             "killer_combo": self.killer_combo,
             "long_card_value": self.long_card_value,
-
             # The cache is a list of cards, so we serialize it like other card lists
             "cache": [card.to_dict() for card in self.cache]
         }
@@ -702,7 +679,7 @@ class GameState:
         # Rebuild the complex objects first
         hero = Player.from_dict(data["hero"])
         monster = Player.from_dict(data["monster"])
-        cache = [Card.from_dict(card_data) for card_data in data["cache"]]
+        cache = [Card.from_dict(c_data) for c_data in data["cache"]]
 
         # Create a new GameState instance with the rebuilt players
         gs = cls(
@@ -1224,9 +1201,9 @@ class SelectFromDeckTop2(Action):
             self.reset()
 
     def get_tempo(self):
-        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "Cheap Shot", "A Playful Pixie", "A Pearlescent Dragon", "Mind Control"]:
+        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "Cheap Shot", "A Playful Pixie", "A Pearlescent Dragon"]:
             self.gs.tempo += 1  # These are high priority cards, especially Go All In and The 'Ol Switcheroo
-            if self.selected_card.name in ["Go All In", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Mind Control"]:
+            if self.selected_card.name in ["Go All In", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon"]:
                 self.gs.tempo += 1
         else:
             self.gs.tempo += 0
@@ -1269,7 +1246,7 @@ class SelectFromGraveyard(Action):
 
     def get_tempo(self):
         # Rewards to trigger for card selections:
-        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Last Stand", "Noble Sacrifice", "Mind Control"]:
+        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Last Stand", "Noble Sacrifice"]:
             self.gs.tempo += 1  # These are good targets to shuffle back into the deck
         elif self.selected_card.name in ["Healthy Eating", "Reconsider"]:
             self.gs.tempo -= 1  # Don't do this since you usually don't need more of these and Healthy Eating draws a card, reducing deck size which is not good for the late game
@@ -1319,9 +1296,9 @@ class SelectFromDeck(Action):
             #print("Passed priority")
 
     def get_tempo(self):
-        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Last Stand", "Noble Sacrifice", "Mind Control"]:
+        if self.selected_card.name in ["Go All In", "Fold", "Poker Face", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Last Stand", "Noble Sacrifice"]:
             self.gs.tempo += 1  # These are high priority cards, especially Go All In and The 'Ol Switcheroo for Monster and Pixie and Dragon for Hero
-            if self.selected_card.name in ["Go All In", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon", "Mind Control"]:
+            if self.selected_card.name in ["Go All In", "The 'Ol Switcheroo", "A Playful Pixie", "A Pearlescent Dragon"]:
                 self.gs.tempo += 1
         else:
             self.gs.tempo += 0  # All other cards are not good, but not really bad either. You shouldn't be punished for not picking the above cards if they are not available.
@@ -1400,7 +1377,7 @@ class SelectFromDeckTop3(Action):
     def get_tempo(self):
         if self.selected_card.card_type == "long":  # It's generally good to move long cards to the top, especially Dragon and Pixie
             self.gs.tempo += 1
-            if self.selected_card.name in ["A Playful Pixie", "A Pearlescent Dragon", "Mind Control"]:
+            if self.selected_card.name in ["A Playful Pixie", "A Pearlescent Dragon"]:
                 self.gs.tempo += 1
         self.gs.tempo += 0  # This is a very low tempo card, but maybe certain choices should be rewarded
         return self.gs.tempo
@@ -1530,8 +1507,6 @@ class PlayFaceUp(Action):
                 self.gs.tempo -= 1  # Try to save it for late game.
             else:
                 self.gs.tempo += 0  # Mid-game play is alright but not ideal.
-        elif self.resolving_card.name == "Mind Control":
-            self.gs.tempo += 3  # Overpowered card
         if self.resolving_card.card_type == "long":
             self.gs.tempo += 1  # You get tempo for playing long cards
         if self.resolving_card.power_cost >= 3:
@@ -1550,7 +1525,7 @@ class PlayFaceDown(Action):
         elif self.gs.me.power_plays_left < 1:
             return False, ERROR_CANT_PLAY_ANOTHER_POWER_CARD
         if self.gs.me.player_type == "computer_ai":
-            if self.gs.me.name == "monster" and (self.resolving_card.name in ["Go All In" , "The 'Ol Switcheroo", "Mind Control"]):  # The AI should never, ever do this
+            if self.gs.me.name == "monster" and (self.resolving_card.name in ["Go All In" , "The 'Ol Switcheroo"]):  # The AI should never, ever do this
                 return False, ERROR_ACTION_WITHELD_FROM_AI
             if self.gs.me.name == "hero" and self.resolving_card.name == "Awakening" and sum(1 for card in self.gs.me.hand if card.name == "Awakening") == 1:
                 return False, ERROR_ACTION_WITHELD_FROM_AI  # The AI should never play Awakening face down if they don't have another in their hand they can play
@@ -1606,6 +1581,7 @@ class PlayFaceDown(Action):
 # All of this was done so that the AI only has to make one choice at a time. This makes training much more simple, since all it has to do is choose a number from 0-40. (The output vector of the neural network corresponds to the action_id.)
 
 def create_card(name, card_id, uid, owner, card_type, power_cost, health, card_text):
+    """Create a card with the right subclass based on the name and other card characteristics."""
     card_name_to_effect = {
         "Awakening": Awakening,
         "Healthy Eating": HealthyEating,
@@ -1621,16 +1597,13 @@ def create_card(name, card_id, uid, owner, card_type, power_cost, health, card_t
         "The 'Ol Switcheroo": TheOlSwitcheroo,
         "Ultimatum": Ultimatum,
         "Peek": Peek,
-        "Mind Control": MindControl
     }  # Not all cards need their own subclass
 
     CardClass = card_name_to_effect.get(name, Card)
     return CardClass(name, card_id, uid, owner, card_type, power_cost, health, card_text)
 
-def build_decks(hero_mcontrol=False, monster_mcontrol=False):
-    # if hero_mcontrol or monster_mcontrol:
-    #     card_data.append(mind_control_data)
-
+def build_decks():
+    """Build decks for both Hero and Monster."""
     hero_deck = []
     monster_deck = []
     uid = 0
@@ -1645,15 +1618,6 @@ def build_decks(hero_mcontrol=False, monster_mcontrol=False):
                 card = create_card(name, card_id, uid, owner, card_type, power_cost, health, card_text)
                 uid += 1
                 monster_deck.append(card)
-            elif owner == "either":
-                # Mind Control
-                if hero_mcontrol:
-                    card = create_card(name, card_id, uid, "hero", card_type, power_cost, health, card_text)
-                    hero_deck.append(card)
-                if monster_mcontrol:
-                    card = create_card(name, card_id, uid, "monster", card_type, power_cost, health, card_text)
-                    monster_deck.append(card)
-                uid += 1
         card_id += 1  # Increment card_id for each new card name
     return hero_deck, monster_deck
 
@@ -1697,7 +1661,7 @@ action_map_helper(PHASE_CHOOSING_ULTIMATUM_CARD, SelectFromDeck)  # If cancel wa
 action_map_helper(PHASE_OPP_CHOOSING_FROM_ULTIMATUM, SelectFromUltimatum)  # Can't cancel due to lack of choice for opponent
 action_map_helper(PHASE_CHOOSING_FROM_DECK_TOP2, SelectFromDeckTop2)  # Can't cancel due to revealed information
 action_map_helper(PHASE_HAND_FULL_DISCARDING_CARD, SelectFromHand, can_cancel=True)
-# Fill in the rest of the game phases with appropriate actions
+# Filled in the rest of the game phases with appropriate actions
 
 def create_action(gs, action_id):
     phase_id = game_phases.index(gs.game_phase)
@@ -1709,13 +1673,8 @@ def create_action(gs, action_id):
         action = action_class(gs, action_id)
     return action
 
-# Test:
-# j = 1
-# for i in range(num_actions):
-#     print(f"Action {i}: {ACTION_MAP[i][j] if ACTION_MAP[i][j] else 'None'}")
 
-
-# This code cells displays the information needed and actions available for a person to play the game in the console. It was mostly used for debugging.
+# This code cells displays the information needed and actions available for a person to play the game in the console. It was mostly used for debugging and has now been replaced by the website.
 
 from copy import deepcopy
 
@@ -1824,200 +1783,233 @@ def display_actions(gs):
 # 
 # Speaking of speed, it's very important for all of this code to be as quick and simple to compute as possible, because training an AI often takes thousands of simulated games to learn from.
 
-# This file needs to return a vector of constant size encoding almost all gamestate information
 # Input Vector Encoder
+# This file needs to return a vector of constant size encoding almost all gamestate information. Different sizes for Hero and Monster.
+# Monster needs fewer cards to be represented in the input vector, since the Monster can never play Hero cards, whereas the Hero can steal Monster cards and play them.
 
-def measure_gs():
-    # Build some temp variables to build a dummy gs, get vector, then get vector length
+def measure_gs(name):
+    """Build some temp variables to build a dummy gs, get vector, then get vector length"""
     temp_hero_deck, temp_monster_deck = build_decks()
     temp_hero = Player("hero", temp_hero_deck)
     temp_monster = Player("monster", temp_monster_deck)
     temp_gs = GameState(temp_hero, temp_monster)
-    return len(gs_to_vector(temp_gs))
+    return len(gs_to_vector(temp_gs, name))
 
-def encode_1hot(card_list):
-    # Can be configured based on 18 card_ids or 40 unique cards, just depending on what the AI can learn better.
-    # 18- and 40-card representations each have their pros and cons. The 18-card representation is about twice as small, but loses the specificity of the 40-card representation.
-    # Also, the final action vector (num_actions) uses the 40-card representation, which does not match the 18-card input vector representation. This may or may not have an impact. Probably not, but worth including.
-    one_hot_vector = [0] * len(card_data)  # 18 cards with different names/card_ids
-    # one_hot_vector = [0] * num_cards  # or 40 unique cards
-    for card in card_list:
-        index = card.card_id  # 18 cards by card_id
-        # index = card.uid  # 40 cards by uid
-        one_hot_vector[index] += 1
-    return one_hot_vector
+def encode_1hot(card_list, name):
+    """Can be configured based on 18 card_ids or 40 unique cards, just depending on what the AI can learn better.
+    18- and 40-card representations each have their pros and cons. The 18-card representation is about twice as small, but loses the specificity of the 40-card representation.
+    Also, the final action vector (num_actions) uses the 40-card representation, which does not match the 18-card input vector representation. This may or may not have an impact. Probably not, but worth including."""
+    small_representation = True  # Can switch
 
-def encode_battlefield_1hot(battlefield):
-    # This returns a one-hot vector with every long card in a battlefield, followed by their health. 
-    # For AIs, the order of information doesn't matter so long as the information is there.
-    # long_cards_vector is a list of the uid of every unique long card
+    if small_representation:
+        one_hot_vector = [0] * len(card_data)  # 18 or 9 cards with different card_ids, depending on name
+        for card in card_list:
+            index = card.card_id  # 18 or 9 cards by card_id
+            one_hot_vector[index] = 1
+        if name == "monster":
+            one_hot_vector = one_hot_vector[:-len(hero_card_data)]  # Monster cannot have Hero cards in deck, hand... anywhere, but Hero can steal Monster cards
+        return one_hot_vector
+    else:
+        one_hot_vector = [0] * num_cards  # or 40 or 20 unique cards
+        for card in card_list:
+            index = card.uid  # 40 or 20 cards by uid
+            one_hot_vector[index] += 1
+        if name == "monster":
+            one_hot_vector = one_hot_vector[:-(num_cards/2)]  # This cuts down on a lot of useless just-zero slots
+        return one_hot_vector
+
+def encode_battlefield_1hot(battlefield, name):
+    """This returns a one-hot vector with every long card in a battlefield, followed by their health. 
+    For AIs, the order of information doesn't matter so long as the information is there.
+    long_cards_vector is a list of the uid of every unique long card"""
     one_hot_vector = [0] * len(long_cards_vector) * 2  # times two to make room for health values of long cards
     for long_card in battlefield:
         if long_card.uid in long_cards_vector:
             index = long_cards_vector.index(long_card.uid)
-            one_hot_vector[index] += 1
-            one_hot_vector[index+len(long_cards_vector)] = long_card.health  # Might want to normalize this value
+            one_hot_vector[index] = 1
+            one_hot_vector[index+len(long_cards_vector)] = long_card.health/4  # Normalized health values
+    if name=="monster":
+        # Only six slots will ever be filled (3x Monster's Pawn presence + health)
+        one_hot_vector = one_hot_vector[:3] + one_hot_vector[len(long_cards_vector):len(long_cards_vector)+3]  
     return one_hot_vector
 
 def encode_game_phase_1hot(phase_id=None):
+    """Encodes a 1hot for the phase_id."""
     one_hot_vector = [0] * len(game_phases)
     if phase_id:
-        one_hot_vector[phase_id] = 1
+        one_hot_vector[phase_id] = 1  # Instead of += 1/3... both work
     return one_hot_vector
 
 def encode_action_1hot(action_id=None):
+    """Encodes a 1hot for the action_id."""
     one_hot_vector = [0] * (num_actions - 1)  # -1 since computers can't cancel and it would be wasted space
     if action_id:
         one_hot_vector[action_id] = 1
     return one_hot_vector
 
-def gs_to_vector(gs, show_reveals=True, show_phase=True, show_cache=True):
-    x = []  # Populate this vector with everything a player can see--in one-hot format so computers/ais can read it easily
+def gs_to_vector(gs, name, show_reveals=True, show_phase=True, show_cache=True):
+    """Populate a vector with everything a player can see - with one-hots - so computers/ais can read it easily in the upcoming model functions."""
+    xh = []  # x input vector for Hero (h for concision)
+    xm = []  # x input vector for Monster (m)
 
-    # There are 5 zones per player: hand, deck, power cards, graveyard, and battlefield
-    # Friendly zones:
-    x += [len(gs.me.hand)/6]
-    x += encode_1hot(gs.me.hand)
-    x += [len(gs.me.deck)/16]
-    x += encode_1hot(gs.me.deck)  # You know what's in your deck, but not the order, and this doesn't encode the order
-    x += [len(gs.me.power_cards)/6]
-    x += encode_1hot(gs.me.power_cards)
-    x += [len(gs.me.graveyard)/20]
-    x += encode_1hot(gs.me.graveyard)
-    x += [len(gs.me.battlefield)/8]
-    x += encode_battlefield_1hot(gs.me.battlefield)  # This only includes long cards, so might want to shorten it to just the long cards (num_long_cards)
+    opp_name = "monster" if name == "hero" else "hero"
 
-    # Enemy zones:
-    x += [len(gs.opp.hand)/6]  # Can't see enemy hand
-    x += [len(gs.opp.deck)/16]  # Can't see inside
-    x += [len(gs.opp.power_cards)/6]  # Power cards are hidden
-    x += encode_1hot(gs.opp.hand + gs.opp.deck + gs.opp.power_cards)  # These are all the enemy unseen cards, which, as a group, are known but not the order, and this doesn't encoder order
-    x += [len(gs.opp.graveyard)/20]
-    x += encode_1hot(gs.opp.graveyard)
-    x += [len(gs.opp.battlefield)/8]
-    x += encode_battlefield_1hot(gs.opp.battlefield)  # This includes health values
+    # First, the information that applies to both
+    for x in [xh, xm]:
+        # Whose turn it is:
+        x += [1] if gs.turn_priority == "hero" else [0]
 
-    # Differences:
-    x += [len(gs.me.hand)/6 - len(gs.opp.hand)/6]
-    x += [len(gs.me.deck)/16 - len(gs.opp.deck)/16]
-    x += [len(gs.me.power_cards)/6 - len(gs.opp.power_cards)/6]
-    x += [len(gs.me.graveyard)/20 - len(gs.opp.graveyard)/20]
-    x += [len(gs.me.battlefield)/8 - len(gs.opp.battlefield)/8]
-    x += [gs.me.health/29 - gs.opp.health/29]
+        # There are 5 zones per player: hand, deck, power cards, graveyard, and battlefield
+        # Friendly zones:
+        x += [len(gs.me.hand)/6]
+        x += encode_1hot(gs.me.hand, name)
+        x += [len(gs.me.deck)/16]
+        x += encode_1hot(gs.me.deck, name)  # You know what's in your deck, but not the order, and this doesn't encode the order
+        x += [len(gs.me.power_cards)/6]
+        x += encode_1hot(gs.me.power_cards, name)
+        x += [len(gs.me.graveyard)/20]
+        x += encode_1hot(gs.me.graveyard, name)
+        x += [len(gs.me.battlefield)/8]
+        x += encode_battlefield_1hot(gs.me.battlefield, name)  # This only includes long cards, so might want to shorten it to just the long cards (num_long_cards)
 
-    # Various ratios
-    x += [gs.me.health / (gs.opp.health + 1e-9)]
-    x += [len(gs.me.hand) / (len(gs.opp.hand) + 1e-9)]
-    x += [len(gs.me.deck) / (len(gs.opp.deck) + 1e-9)]
-    x += [len(gs.me.power_cards) / (len(gs.opp.power_cards) + 1e-9)]
-    x += [len(gs.me.graveyard) / (len(gs.opp.graveyard) + 1e-9)]
-    x += [len(gs.me.battlefield) / (len(gs.opp.battlefield) + 1e-9)]
+        # Enemy zones:
+        x += [len(gs.opp.hand)/6]  # Can't see enemy hand
+        x += [len(gs.opp.deck)/16]  # Can't see inside
+        x += [len(gs.opp.power_cards)/6]  # Power cards are hidden
+        x += encode_1hot((gs.opp.hand + gs.opp.deck + gs.opp.power_cards), opp_name)  # These are all the enemy unseen cards, which, as a group, are known but not the order, and this doesn't encoder order
+        x += [len(gs.opp.graveyard)/20]
+        x += encode_1hot(gs.opp.graveyard, opp_name)
+        x += [len(gs.opp.battlefield)/8]
+        x += encode_battlefield_1hot(gs.opp.battlefield, opp_name)  # This includes health values
 
-    # Misc.:
-    x += [gs.me.health/29, gs.opp.health/29, gs.me.power/6, gs.me.power_plays_left, gs.uncertainty/32, gs.me.action_number/40,
-          int(gs.me.monsters_pawn_buff), int(gs.me.last_stand_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first), int(gs.me.is_mind_controlled),
-          gs.turn_number/15, int(gs.card_played_this_turn), int(gs.short_card_played_this_turn), gs.short_term_reward(gs.me.name), gs.long_term_reward(gs.me.name)]  # Some of these values have been somewhat arbitrarily scaled to around 1 - this should help the AI
+        # Differences:
+        x += [len(gs.me.hand)/6 - len(gs.opp.hand)/6]
+        x += [len(gs.me.deck)/16 - len(gs.opp.deck)/16]
+        x += [len(gs.me.power_cards)/6 - len(gs.opp.power_cards)/6]
+        x += [len(gs.me.graveyard)/20 - len(gs.opp.graveyard)/20]
+        x += [len(gs.me.battlefield)/8 - len(gs.opp.battlefield)/8]
+        x += [gs.me.health/29 - gs.opp.health/29]
 
-    # Hand total and average power cost:
-    x += [(sum(card.power_cost for card in gs.me.hand))/6]
-    x += [(sum(card.power_cost for card in gs.me.hand) / (len(gs.me.hand) + 1e-9))/6]
+        # Various ratios
+        x += [gs.me.health / (gs.opp.health + 1e-9)]
+        x += [len(gs.me.hand) / (len(gs.opp.hand) + 1e-9)]
+        x += [len(gs.me.deck) / (len(gs.opp.deck) + 1e-9)]
+        x += [len(gs.me.power_cards) / (len(gs.opp.power_cards) + 1e-9)]
+        x += [len(gs.me.graveyard) / (len(gs.opp.graveyard) + 1e-9)]
+        x += [len(gs.me.battlefield) / (len(gs.opp.battlefield) + 1e-9)]
 
-    # Damage, deck burn, and lethal potential:
-    damage_potential = sum(4 for card in gs.me.hand if card.name == "Poker Face") + sum(2 for card in gs.me.hand if card.name == "Cheap Shot") + sum(5 for card in gs.me.hand if card.name == "Go All In")
-    x += [damage_potential/29]
-    x += [1] if gs.opp.health <= damage_potential else [0]
-    deck_burn_potential = sum(3 for card in gs.me.hand if card.name == "Go All In") + sum(2 for card in gs.me.hand if card.name == "Fold")
-    x += [deck_burn_potential/16]
-    x += [1] if len(gs.opp.deck) <= deck_burn_potential else [0]
+        # Misc.:
+        x += [gs.me.health/29, gs.opp.health/29, gs.me.power/6, gs.me.power_plays_left, gs.uncertainty/32, gs.me.action_number/40,
+            int(gs.me.monsters_pawn_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first), gs.turn_number/15, 
+            int(gs.card_played_this_turn), int(gs.short_card_played_this_turn), gs.short_term_reward(gs.me.name), gs.long_term_reward(gs.me.name)]  # Some of these values have been somewhat arbitrarily scaled to around 1 - this should help the AI
 
+        # Hand total and average power cost:
+        x += [(sum(card.power_cost for card in gs.me.hand))/6]
+        x += [(sum(card.power_cost for card in gs.me.hand) / (len(gs.me.hand) + 1e-9))/6]
+
+        # Damage, deck burn, and lethal potential:
+        damage_potential = sum(4 for card in gs.me.hand if card.name == "Poker Face") + sum(2 for card in gs.me.hand if card.name == "Cheap Shot") + sum(5 for card in gs.me.hand if card.name == "Go All In")
+        x += [damage_potential/29]
+        x += [1] if gs.opp.health <= damage_potential else [0]
+        deck_burn_potential = sum(3 for card in gs.me.hand if card.name == "Go All In") + sum(2 for card in gs.me.hand if card.name == "Fold")
+        x += [deck_burn_potential/16]
+        x += [1] if len(gs.opp.deck) <= deck_burn_potential else [0]
+
+        # Tells you if the cards in your hand are legal to play
+        playable_vector = [0] * len(card_data)  # <-- change this if changing to uid-focused one-hots
+        for card in gs.me.hand:  # This mimics the is_legal for play face-up
+            has_enough_power = card.power_cost <= gs.me.power
+            is_playable = True
+            if any(long_card.name == "The Sun" for long_card in gs.opp.battlefield) and gs.card_played_this_turn:
+                is_playable = False
+            elif card.name == "Noble Sacrifice" and not gs.me.battlefield:
+                is_playable = False
+            elif card.card_type == "short":
+                if gs.me.monsters_pawn_buff:
+                    is_playable = True
+                elif not has_enough_power:
+                    is_playable = False
+            elif card.card_type == "long":
+                if not has_enough_power:
+                    is_playable = False
+            if is_playable:
+                playable_vector[card.card_id] = 1  # <-- change this if changing to uid-focused one-hots
+        x += playable_vector
+
+        # Card-specific reveals:
+        if show_reveals:  # This puts all of the situational reveal cards in the same few vector spots, which might not be ideal, but it saves resources.
+            # Reconsider
+            revealed = []
+            if gs.game_phase == PHASE_REORDERING_DECK_TOP3:
+                revealed = gs.me.deck[:3]
+            # Noble Sacrifice
+            elif gs.game_phase == PHASE_DISCARDING_CARD_FROM_OPP_HAND:
+                revealed = gs.opp.hand
+            # Ultimatum 1
+            elif gs.game_phase == PHASE_CHOOSING_ULTIMATUM_CARD:
+                revealed = gs.me.deck
+            # Ultimatum 2
+            elif gs.game_phase == PHASE_OPP_CHOOSING_FROM_ULTIMATUM:
+                revealed = gs.cache[1:3]
+            # Peek
+            elif gs.game_phase == PHASE_CHOOSING_FROM_DECK_TOP2:
+                revealed = gs.me.deck[:2]
+            x += encode_1hot(revealed, name)
+
+        # Next need to encode the current game phase:
+        if show_phase:
+            phase_id = game_phases.index(gs.game_phase)
+            x += [phase_id/15]
+            x += encode_game_phase_1hot(phase_id)
+
+        # It's also possible to add the cache to the mix:
+        if show_cache:
+            max_size = 4  # The maximum number is to accomodate Last Stand and Reconsider, which can select 3 cards plus the card itself = 4
+            # This encodes the order of the cache, which does matter.
+            for i in range(max_size):
+                if i < len(gs.cache):
+                    card = gs.cache[i]
+                    vec = encode_1hot([card], "hero")  # Always encode full size
+                else:
+                    vec = [0] * len(card_data)  # <-- change this if changing to uid-focused one-hots
+                x += vec 
+
+        # All of the above are mostly essential.
+
+    # Then Hero
+    xh += [int(gs.me.last_stand_buff)]
+    # Long card kill potential
+    have_target = True if any(long_card.name in ["Monster's Pawn"] for long_card in gs.opp.battlefield) else False
+    have_card = True if any(card.name == "Poker Face" for card in gs.me.hand) else False
+    xm += [1] if (have_target and have_card) else [0]
     # Heal/damage, deck burn potential from long cards - me:
     damage_potential = sum(5 for card in gs.me.battlefield if card.name == "A Pearlescent Dragon")  # Heal/damage potential
-    x += [damage_potential/29]
-    x += [1] if gs.opp.health <= damage_potential else [0]
+    xh += [damage_potential/29]
+    xh += [1] if gs.opp.health <= damage_potential else [0]
     deck_burn_potential = sum(1 for card in gs.me.battlefield if card.name == "A Playful Pixie") + 1  # Burn potential, +1 for start of turn card draw
-    x += [deck_burn_potential/16]
-    x += [1] if len(gs.opp.deck) <= deck_burn_potential else [0]
+    xh += [deck_burn_potential/16]
+    xh += [1] if len(gs.opp.deck) <= deck_burn_potential else [0]
 
-    # Heal/damage, deck burn potential from long cards - opp:
-    damage_potential = sum(5 for card in gs.opp.battlefield if card.name == "A Pearlescent Dragon")
-    x += [damage_potential/29]
-    x += [1] if gs.me.health <= damage_potential else [0]  # Tells you if you are about to die
-    deck_burn_potential = sum(1 for card in gs.opp.battlefield if card.name == "A Playful Pixie") + 1  # Burn potential
-    x += [deck_burn_potential/16]
-    x += [1] if len(gs.me.deck) <= deck_burn_potential else [0]
-
+    # Then Monster
     # Long card kill potential
     have_target = True if any(long_card.name in ["A Playful Pixie", "A Pearlescent Dragon"] for long_card in gs.opp.battlefield) else False
     have_card = True if any(card.name == "Poker Face" for card in gs.me.hand) else False
-    x += [1] if (have_target and have_card) else [0]
-
+    xm += [1] if (have_target and have_card) else [0]
     have_target = True if any(long_card.name in ["The Sun", "The Moon"] for long_card in gs.opp.battlefield) else False
     have_card = True if any(card.name == "Cheap Shot" for card in gs.me.hand) else False
-    x += [1] if (have_target and have_card) else [0]
+    xm += [1] if (have_target and have_card) else [0]
+    # Heal/damage, deck burn potential from long cards - opp:
+    damage_potential = sum(5 for card in gs.opp.battlefield if card.name == "A Pearlescent Dragon")
+    xm += [damage_potential/29]
+    xm += [1] if gs.me.health <= damage_potential else [0]  # Tells you if you are about to die
+    deck_burn_potential = sum(1 for card in gs.opp.battlefield if card.name == "A Playful Pixie") + 1  # Burn potential
+    xm += [deck_burn_potential/16]
+    xm += [1] if len(gs.me.deck) <= deck_burn_potential else [0]
 
-    # Tells you if the cards in your hand are legal to play
-    playable_vector = [0] * len(card_data)  # <-- change this if changing to uid-focused one-hots
-    for card in gs.me.hand:  # This mimics the is_legal for play face-up
-        has_enough_power = card.power_cost <= gs.me.power
-        is_playable = True
-        if any(long_card.name == "The Sun" for long_card in gs.opp.battlefield) and gs.card_played_this_turn:
-            is_playable = False
-        elif card.name == "Noble Sacrifice" and not gs.me.battlefield:
-            is_playable = False
-        elif card.card_type == "short":
-            if gs.me.monsters_pawn_buff:
-                is_playable = True
-            elif not has_enough_power:
-                is_playable = False
-        elif card.card_type == "long":
-            if not has_enough_power:
-                is_playable = False
-        if is_playable:
-            playable_vector[card.card_id] = 1
-    x += playable_vector
-
-    # Card-specific reveals:
-    if show_reveals:  # This puts all of the situational reveal cards in the same few vector spots, which might not be ideal, but it saves resources.
-        # Reconsider
-        revealed = []
-        if gs.game_phase == PHASE_REORDERING_DECK_TOP3:
-            revealed = gs.me.deck[:3]
-        # Noble Sacrifice
-        elif gs.game_phase == PHASE_DISCARDING_CARD_FROM_OPP_HAND:
-            revealed = gs.opp.hand
-        # Ultimatum 1
-        elif gs.game_phase == PHASE_CHOOSING_ULTIMATUM_CARD:
-            revealed = gs.me.deck
-        # Ultimatum 2
-        elif gs.game_phase == PHASE_OPP_CHOOSING_FROM_ULTIMATUM:
-            revealed = gs.cache[1:3]
-        # Peek
-        elif gs.game_phase == PHASE_CHOOSING_FROM_DECK_TOP2:
-            revealed = gs.me.deck[:2]
-        x += encode_1hot(revealed)
-
-    # Next need to encode the current game phase:
-    if show_phase:
-        phase_id = game_phases.index(gs.game_phase)
-        x += [phase_id/15]
-        x += encode_game_phase_1hot(phase_id)
-
-    # It's also possible to add the cache to the mix:
-    if show_cache:
-        max_size = 4  # The maximum number is to accomodate Last Stand and Reconsider, which can select 3 cards plus the card itself = 4
-        # This encodes the order of the cache, which does matter.
-        for i in range(max_size):
-            if i < len(gs.cache):
-                card = gs.cache[i]
-                vec = encode_1hot([card])
-            else:
-                vec = [0] * len(card_data)  # <-- change this if changing to uid-focused one-hots
-            x += vec 
-
-    # All of the above are mostly essential.
-
-    # Then return tha damn thing
-    return x
+    if name == "hero":
+        return xh
+    elif name == "monster":
+        return xm
 
 
 # ## The Deep Reinforcement, "Gated Recurrent Unit", Neural Network Itself
@@ -2055,18 +2047,16 @@ class Network(nn.Module):
     def __init__(self, name, **kwargs):
         super().__init__()
         # Hyperparameters at the top:
-        self.input_size = measure_gs() + num_actions-1
+        self.input_size = measure_gs(name) + num_actions-1
         self.rnn_size = kwargs["rnn_size"]   # Number of hidden neurons in the recurrant neural network's internal layers.
         self.num_rnn_layers = kwargs["num_rnn_layers"]
         self.feedforward_size = kwargs["feedforward_size"]
         self.dropout_rate = kwargs["dropout_rate"]
-        self.long_term_gamma = kwargs["long_term_gamma"]  # Discount factor for long-term reward that only show up at the end of the game, 0.95 seems good, affecting all actions.
-        self.short_term_gamma = kwargs["short_term_gamma"]  # Discount factors for short-term rewards that show up during the game and need to dissipate backwards in time quickly.
         self.epochs = kwargs["epochs"]
         self.temperature = kwargs["temperature"]
         self.entropy_coef = kwargs["entropy_coef"]
-        self.negative_reward_clamp = kwargs["negative_reward_clamp"]
-        self.prediction_loss_coef = kwargs["prediction_loss_coef"]
+        self.short_term_gamma = kwargs["short_term_gamma"]  # Discount factors for short-term rewards that show up during the game and need to dissipate backwards in time quickly.
+        self.long_term_gamma = kwargs["long_term_gamma"]  # Discount factor for long-term reward that only show up at the end of the game, 0.95 seems good, affecting all actions.
         # Then network layer architecture:
         self.rnn = nn.GRU(self.input_size, self.rnn_size, num_layers=self.num_rnn_layers, dropout=self.dropout_rate)  # This is the Long-Short-Term Memory recurrant neural network. Has complex internal workings.
         self.ln_rnn = nn.LayerNorm(self.rnn_size)  # Normalize the output of the LSTM
@@ -2075,7 +2065,6 @@ class Network(nn.Module):
         self.ln1 = nn.LayerNorm(self.feedforward_size)  # Normalize the layer's outputs/logits (very helpful since Poker Monster has a lot of randomness)
         self.dropout2 = nn.Dropout(self.dropout_rate)
         self.fc2 = nn.Linear(self.feedforward_size, num_actions-1)  # Actor, or policy head
-        self.fc3 = nn.Linear(self.feedforward_size, self.input_size)  # Predictor head
         # The optimizer and LR scheduler:
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=kwargs["lr"], weight_decay=kwargs["weight_decay"])  # PyTorch's optimizer for the neural network. Adam or AdamW work well.
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(self.optimizer, T_0=kwargs["T_0"], T_mult=kwargs["T_mult"], eta_min=kwargs["eta_min"])
@@ -2087,12 +2076,16 @@ class Network(nn.Module):
         self.num_params = sum(p.numel() for p in self.parameters())  # Total number of parameters (network size)
         self.to(device)
 
+    @property
+    def game_length(self):
+        return len(self.memory["action_ids"])
+
     def forward(self, x, prev_rnn_state):
         # Forward pass of the neural network. This produces the main outputs for the network but this is not called directly from main(). Instead, sample_action is called.
-        rnn_output, new_rnn_state = self.rnn(x, prev_rnn_state)  # For LSTM, x shape must be: [seq_length, measure_gs()]. A bit tricky but addressed below before calling forward.
+        rnn_output, new_rnn_state = self.rnn(x, prev_rnn_state)  # For LSTM, x shape must be: [seq_length, measure_gs(name)]. A bit tricky but addressed below before calling forward.
         x1 = self.dropout1(self.ln_rnn(rnn_output[-1]))  # Apply LayerNorm to LSTM output
         x2 = self.dropout2(torch.relu(self.ln1(self.fc1(x1))) + x1)  # Feedforward layer for ln1 and fc1, with residual
-        return self.fc2(x2), new_rnn_state, self.fc3(x2)
+        return self.fc2(x2), new_rnn_state
 
     def reset_memory(self):
         # Since LSTM requires an existing rnn_state, this initializes one with zeros that is used.
@@ -2101,15 +2094,15 @@ class Network(nn.Module):
         self.memory = {
                     "gs_vectors": [],
                     "action_ids": [],
-                    "long_term_rewards": [],
-                    "short_term_rewards": [],
                     "masks": [],
                     "tempos": [],
                     "entropies": [],
                     "logprobs": [],
                     "rnn_states": [h0],
-                    "x_states": [],
-                    "prediction_logits": []
+                    "opp_choices": [],
+                    "predictions": [],
+                    "short_term_rewards": [],
+                    "long_term_rewards": [],
                 }
 
     def tempo_mask(self, gs):
@@ -2122,25 +2115,26 @@ class Network(nn.Module):
             action = create_action(gs, i)
             # Check if action is legal
             legal, reason = action.is_legal()
-            # If not legal, set index to -infinity; -infinity becomes probability 0 in softmax (won't be picked)
+            # If not legal, set mask index to -infinity; -infinity becomes probability 0 in softmax (won't be picked)
             if not legal:
                 mask[i] = float('-inf')
                 tempos[i] = -2  # Large negative value
             if legal:
-                tempos[i] = action.predict_tempo()/4  # Only simulate for legal tempos, else bug
+                tempos[i] = action.predict_tempo()/4  # Only simulate for legal tempos, or it breaks. Normalized by dividing by 4.
         # Return masked logits
         return mask, tempos  # Save mask for training since making actions is intensive and saving gs is a bad idea
 
-    def sample_action(self, gs, prev_rnn_state=None, training=False):
-        # This is the main function that is called from the main loop (outside here) to get an action based on NN inference.
-        # Input a gamestate (gs), returns an action_id (an integer).
-        ctx = torch.inference_mode() if (self.epochs > 1 or training==False) else nullcontext()
+    def sample_action(self, gs, prev_rnn_state=None, training=False, predicting=False):
+        """This is the main function that is called from the main loop (outside here) to get an action based on NN inference.
+        Input a gamestate (gs), returns an action_id (an integer).
+        Prediction is active during the opponent's turn: try to predict opponent's moves."""
+        ctx = torch.inference_mode() if (self.epochs>1 or training==False) else nullcontext()
         # This part turns off gradient calculations, since all of this will be recomputed in train(). Can also use 'with torch.no_grad():'. To speed things up. Also disables dropout.
         with ctx:
             # Get mask + simulated tempos (and save mask for later training)
             mask, tempos = self.tempo_mask(gs)
             # Get gs_vector
-            gs_vector = gs_to_vector(gs)
+            gs_vector = gs_to_vector(gs, self.name)
             # Convert to tensor for PyTorch and move to GPU if available
             x = torch.tensor(gs_vector, dtype=torch.float32).to(device)
             # Concatenate x with possible tempos
@@ -2150,11 +2144,7 @@ class Network(nn.Module):
             # Retreive previous rnn_state
             prev_rnn_state = prev_rnn_state if (prev_rnn_state is not None) else self.memory["rnn_states"][-1]
             # Do forward pass
-            policy_logits, new_rnn_state, prediction_logits = self(x, prev_rnn_state)
-            # print(f"Action {len(self.memory['action_ids'])-1} sample logits {logits}")
-            # if self.name == "hero" and len(self.memory['action_ids']) == 0:
-            #     print(f"SAMPLE Action {len(self.memory['action_ids'])} gs_vector = {gs_vector}")
-            #     print(f"SAMPLE Action {len(self.memory['action_ids'])} logits = {logits}")
+            policy_logits, new_rnn_state = self(x, prev_rnn_state)
             # Element-wise vector addition
             masked_logits = policy_logits + mask
             # Apply softmax to get probabilities; lower temp is less random and chaotic and higher temp is more uniform. High temp is good for early game exploration, low temp is good for late game exploitation.
@@ -2167,126 +2157,110 @@ class Network(nn.Module):
             entropy = dist.entropy()
             # Get a random sample (sample size=1); dist.sample returns the index of the sampled value. This is a Monte-Carlo approach to learning.
             sample = dist.sample()  # Tensor
-            if gs.me.player_type == "computer_mind_control":
-                mind_controlled_logits = masked_logits.clone()
-                mind_controlled_logits[mind_controlled_logits == float('-inf')] = float('inf')  # Fix to enable a safe argmin
-                action_id = torch.argmin(mind_controlled_logits).item()
-            else:
-                # Convert to integer
-                action_id = sample.item()
+            # Convert to integer
+            action_id = sample.item()
             # Calculate logprob for training when epochs=1
             logprob = torch.log(probs[action_id])
             # Save important data to memory for training
             if training:
-                self.memory["gs_vectors"].append(torch.tensor(copy(gs_vector), dtype=torch.float32))  # Must copy
-                self.memory["action_ids"].append(torch.tensor(action_id, dtype=torch.long))
-                self.memory["masks"].append(mask)
-                self.memory["tempos"].append(tempos)
-                self.memory["entropies"].append(entropy)
-                self.memory["logprobs"].append(logprob)
-                self.memory["rnn_states"].append(new_rnn_state)
-                self.memory["x_states"].append(x)
-                self.memory["prediction_logits"].append(prediction_logits)
+                if not predicting:
+                    self.memory["gs_vectors"].append(torch.tensor(copy(gs_vector), dtype=torch.float32))  # Must copy
+                    self.memory["action_ids"].append(torch.tensor(action_id, dtype=torch.long))
+                    self.memory["masks"].append(mask)
+                    self.memory["tempos"].append(tempos)
+                    self.memory["entropies"].append(entropy)
+                    self.memory["logprobs"].append(logprob)
+                elif predicting:
+                    self.memory["predictions"].append(probs)
+                    # print(f"Predictions len {self.name}: {len(self.memory['predictions'])}")
+                    # print(f"Opp_choices len {self.name}: {len(self.memory['opp_choices'])}")
+            self.memory["rnn_states"].append(new_rnn_state)
 
-            return action_id, new_rnn_state
+            return action_id, new_rnn_state, probs.detach()  # new_rnn_state must be passed for the website and saved in the session.
 
-    def train_network(self, epochs=1):
-        # This is the training loop that is called after the game is over, data has been collected, and there is a winner (or tie)
-        # All of the actions that took place are recomputed N times, where N is the number of epochs, if N is greater than 1. If N=1, the data was computed during sample_action.
-        # This applies the learning algorithm N times to optimize for the algorithm called 'REINFORCE'
-        losses = []  # Will be returned to make a graph later
-
-        if not self.memory:
-            print("Memory is empty, not training")
-            self.reset_memory()  # Critical to reset memory!
-            return [0] * self.epochs
-
-        # print(f"Training {self.name}")
-
-        B = len(self.memory["action_ids"])  # Number of actions
-
-        # These are vectorized representations for every step, retreived from memory.
-        # For example, gs_vectors[0] is the gs_vector for the 0th action.
-        # This vectorized approach is must faster for computers to compute, especially on GPUs.
-        gs_vectors = torch.stack(self.memory["gs_vectors"]).to(device)  # [B, measure_gs()] = dims
-        action_ids = torch.tensor(self.memory["action_ids"], dtype=torch.long).to(device)  # [B]
-        long_rewards = torch.stack(self.memory["long_term_rewards"]).to(device)  # [B]
-        short_rewards = torch.stack(self.memory["short_term_rewards"]).to(device)  # [B]
-        masks = torch.stack(self.memory["masks"]).to(device)  # [B, num_actions - 1]
-        tempos = torch.stack(self.memory["tempos"]).to(device)
-        entropies = torch.stack(self.memory["entropies"]).to(device)
-        logprobs = torch.stack(self.memory["logprobs"]).to(device)
-        prediction_logits_1st_epoch = torch.stack(self.memory["prediction_logits"]).to(device)
-        next_input_vectors = torch.stack([x_state for x_state in self.memory["x_states"][1:]]).to(device)  # len B-1
-
-        # Calculating discounted reward signals
-        reward_signals = torch.zeros(B).to(device)
+    def calculate_rewards(self, short_rewards, long_rewards):
+        """Calculates discounted reward signals."""
+        reward_signals = torch.zeros(self.game_length).to(device)
         # These will be propagated backwards in time to calculate the reward signal for every action.
-        long_discounted_sum = 0.0
         short_discounted_sum = 0.0
+        long_discounted_sum = 0.0
         # Iterate backwards to calculate discounted returns efficiently
-        for t in reversed(range(B)):
-            long_discounted_sum = long_rewards[t] + self.long_term_gamma*long_discounted_sum
+        for t in reversed(range(self.game_length)):
             short_discounted_sum = short_rewards[t] + self.short_term_gamma*short_discounted_sum
+            long_discounted_sum = long_rewards[t] + self.long_term_gamma*long_discounted_sum
             # Their sum equals a reward signal
-            reward_signals[t] = long_discounted_sum + short_discounted_sum
-        # Clamp negative rewards to make them less punishing
-        # reward_signals = reward_signals.clamp(min=self.negative_reward_clamp)
+            reward_signals[t] = short_discounted_sum + long_discounted_sum
 
         # print(f"Num rewards: {len(reward_signals)}")
         # for reward in reward_signals:
         #     print(f"{self.name} Reward signal: {reward.item()}")
         # print(f"Cumulative Reward: {reward_signals.sum().item():.2f} {self.name}")
 
+        return reward_signals
+
+    def train_network(self, train_predictions=False):
+        # This is the training loop that is called after the game is over, data has been collected, and there is a winner (or tie)
+        # All of the actions that took place are recomputed N times, where N is the number of epochs, if N is greater than 1. If N=1, the data was computed during sample_action.
+        # This applies the learning algorithm N times to optimize for the algorithm called 'REINFORCE'
+        losses = []  # Will be returned to make a graph later
+
+        # print(f"Predictions len: {len(self.memory['predictions'])}")
+        # print(f"Opp_choices len: {len(self.memory['opp_choices'])}")
+
+        # These are vectorized representations for every step, retreived from memory.
+        # For example, gs_vectors[0] is the gs_vector for the 0th action.
+        # This vectorized approach is must faster for computers to compute, especially on GPUs.
+        gs_vectors = torch.stack(self.memory["gs_vectors"]).to(device)  # [self.game_length, measure_gs(name)] = dims
+        action_ids = torch.tensor(self.memory["action_ids"], dtype=torch.long).to(device)  # [self.game_length]
+        masks = torch.stack(self.memory["masks"]).to(device)  # [self.game_length, num_actions - 1]
+        tempos = torch.stack(self.memory["tempos"]).to(device)
+        entropies = torch.stack(self.memory["entropies"]).to(device)
+        logprobs = torch.stack(self.memory["logprobs"]).to(device)
+        short_rewards = torch.stack(self.memory["short_term_rewards"]).to(device)  # [self.game_length]
+        long_rewards = torch.stack(self.memory["long_term_rewards"]).to(device)  # [self.game_length]
+        reward_signals = self.calculate_rewards(short_rewards, long_rewards)
+
+        if train_predictions:
+            predictions = torch.stack(self.memory["predictions"]).to(device)
+            opp_choices = torch.stack(self.memory["opp_choices"]).to(device)
+
         # Vectorized learning:
         if self.epochs > 1:
             for epoch in range(self.epochs):
-                self.memory["rnn_states"] = []
                 # Recomputing ALL rnn forward passes
-                # Remake h0 and c0
-                h0 = torch.zeros(self.num_rnn_layers, self.rnn_size).to(device)
-                # Assemble initial hidden state
-                rnn_state = h0
+                self.memory["rnn_states"] = []
+                # Remake h0 to assemble initial hidden state
+                rnn_state = torch.zeros(self.num_rnn_layers, self.rnn_size).to(device)
                 # Intialize logits vectors
                 policy_logits = []
-                prediction_logits = []
                 # Forward pass for every action done again
-                for i in range(B):  # This for loop is very slow. Unfortunately, it cannot be vectorized because of the way recurrent neural networks are.
+                for i in range(self.game_length):  # This for loop is very slow. Unfortunately, it cannot be vectorized because of the way recurrent neural networks are.
                     # retreive correct step number
                     gs_vector = gs_vectors[i]
                     tempos_ = tempos[i]
                     # Concatenate with tempos and shape for LSTM
                     x = torch.cat((gs_vector, tempos_), dim=0).unsqueeze(0)
                     # Forward using (in-place updating) rnn state and gs_vector for every step
-                    policy_logits_, rnn_state, prediction_logits_ = self(x, rnn_state)
-                    # Add to vector, shape [B, num_actions - 1]
+                    policy_logits_, rnn_state = self(x, rnn_state)
+                    # Add to vector, shape [self.game_length, num_actions - 1]
                     policy_logits.append(policy_logits_)
-                    prediction_logits.append(prediction_logits_)
-                    # if self.name == "hero" and i == 0:
-                        # print(f"TRAIN Action {i} gs_vector = {gs_vector}")
-                        # print(f"TRAIN Action {i} logits = {logits_}")
-                    # print(f"Action {i} Training logits: {logits}")
                 # Stack logits
                 policy_logits = torch.stack(policy_logits)
-                prediction_logits = torch.stack(prediction_logits)
                 # Mask logits using previous masks to save resources
-                masked_logits = policy_logits + masks  # [B, num_actions - 1] For this to work, masks needs to have -inf at illegal indexes and 0 everywhere else
+                masked_logits = policy_logits + masks  # [self.game_length, num_actions - 1] For this to work, masks needs to have -inf at illegal indexes and 0 everywhere else
                 # Calculate probs like above in get_sample()
-                probs = F.softmax(masked_logits / (self.temperature + 1e-9), dim=1)  # [B, num_actions - 1]
+                probs = F.softmax(masked_logits / (self.temperature + 1e-9), dim=1)  # [self.game_length, num_actions - 1]
                 # Add a small epsilon to try to avoid floating-point/nan errors
                 probs = probs.clamp(min=1e-9)
                 # Find probabilities of choosing the chosen actions using vectorized math and saved action_ids
-                chosen_action_probs = probs[torch.arange(B), action_ids]  # [B]
+                chosen_action_probs = probs[torch.arange(self.game_length), action_ids]  # [self.game_length]
                 # Calculate policy loss using REINFORCE formula: -log(prob)*R
-                policy_loss = -torch.log(chosen_action_probs) * reward_signals.detach()  # [B]
-                # Calculate prediction loss
-                prediction_loss = F.mse_loss(prediction_logits[:-1], next_input_vectors.squeeze(1).detach())
+                policy_loss = -torch.log(chosen_action_probs) * reward_signals.detach()  # [self.game_length]
                 # Add to total loss
-                total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean() + self.prediction_loss_coef*prediction_loss.mean()
+                total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean()
                 # Append to logger
                 losses.append(total_loss.item())
                 # losses.append(self.optimizer.param_groups[0]['lr'])  # Optional to watch learning rates
-                # losses.append(rewards[-1])
                 # Begin PyTorch gradient descent learning algorithm
                 self.optimizer.zero_grad()
                 # Backpropagate using total_loss
@@ -2297,9 +2271,14 @@ class Network(nn.Module):
                 self.optimizer.step()
 
         else:  # For epochs=1 case (much faster vectorization due to no for loops, and less overfitting)
+            # Kullback-Leibler (KL) Divergence is an option rather than MSELoss
+            prediction_loss_fn = nn.MSELoss()
+            if train_predictions:
+                prediction_loss = 0.5*(prediction_loss_fn(predictions, opp_choices)).mean()
+            else:
+                prediction_loss = 0.0
             policy_loss = -logprobs * reward_signals.detach()
-            prediction_loss = F.mse_loss(prediction_logits_1st_epoch[:-1], next_input_vectors.squeeze(1).detach())  # prediction_logits has len B-1 (terminal gamestate not available)
-            total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean() + self.prediction_loss_coef*prediction_loss.mean()  # Use mean and not sum to avoid favoring short games
+            total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean() + prediction_loss  # Use mean and not sum to avoid favoring short games
             losses.append(total_loss.item())
             # losses.append(self.optimizer.param_groups[0]['lr'])  # To watch learning rates
             self.optimizer.zero_grad()
@@ -2308,7 +2287,7 @@ class Network(nn.Module):
             self.optimizer.step()
 
         if self.use_lr_scheduler:
-            # Update only once per episode
+            # Update only once per game
             self.scheduler.step()
 
         # Finally, reset memory
@@ -2322,11 +2301,7 @@ class Network(nn.Module):
         directory = os.getcwd()
         # Create the full file path by joining the directory and filename
         file_path = os.path.join(directory, f"ai_weights_{name}.pth")
-
-        # Save the model
         torch.save(self.state_dict(), file_path)
-
-        # Print the full, unambiguous path
         print(f"Saved PyTorch model to: {file_path}")
 
     def load(self, name):
@@ -2366,7 +2341,6 @@ class Main:
         self.anneal_temperature = kwargs["anneal_temperature"]
         self.anneal_entropy = kwargs["anneal_entropy"]
         # Testing parameters:
-        self.testing_best_of = kwargs["testing_best_of"]
         self.testing_hero_type = kwargs["testing_hero_type"]
         self.testing_monster_type = kwargs["testing_monster_type"]
         self.testing_display = kwargs["testing_display"]
@@ -2375,7 +2349,7 @@ class Main:
         # Data from training:
         self.hero_loss_data = []  # To be filled out after training and used for graphs
         self.monster_loss_data = []
-        self.hero_game_data = []  # 1 for win, 0 for loss, 0.5 for tie. Inverted for Monster.
+        self.hero_game_data = []  # 1 for win, 0 for loss, 0.5 for tie.
         self.monster_game_data = []
         # Create AIs
         self.hyperparameters = hyperparameters
@@ -2397,11 +2371,13 @@ class Main:
             self.monster_ai.load("monster")
         except:
             print("No monster_ai to load")
-        print(f"Total parameters: {self.hero_ai.num_params}")
-        print(f"Input vector size: {self.hero_ai.input_size}")
+        print(f"Hero total parameters: {self.hero_ai.num_params}")
+        print(f"Hero input vector size: {self.hero_ai.input_size}")
+        print(f"Monster total parameters: {self.monster_ai.num_params}")
+        print(f"Monster input vector size: {self.monster_ai.input_size}")
 
-    def run_game(self, player_type_hero, player_type_monster, display=True, train_hero=False, train_monster=False, train_only_on_wins=False, hero_mcontrol=False, monster_mcontrol=False):
-        hero_deck, monster_deck = build_decks(hero_mcontrol, monster_mcontrol)
+    def run_game(self, player_type_hero, player_type_monster, display=True, train_hero=False, train_monster=False, train_only_on_wins=False):
+        hero_deck, monster_deck = build_decks()
         hero = Player("hero", hero_deck, player_type_hero)
         monster = Player("monster", monster_deck, player_type_monster)
 
@@ -2445,11 +2421,20 @@ class Main:
                     elif gs.me.player_type == "computer_random":
                         choice_number = randint(0, num_actions - 2)  # -2 because cancel is not available to computers
                     # For a computer AI:
-                    elif gs.me.player_type in ["computer_ai", "computer_mind_control"]:
+                    elif gs.me.player_type in ["computer_ai"]:
+                        # Train both AIs on the same turn
                         if gs.me.name == "hero":
-                            choice_number, _ = me_ai.sample_action(gs, training=train_hero)
+                            choice_number, _, probs = me_ai.sample_action(gs, training=train_hero)
                         elif gs.me.name == "monster":
-                            choice_number, _ = me_ai.sample_action(gs, training=train_monster)
+                            choice_number, _, probs = me_ai.sample_action(gs, training=train_monster)
+                        if gs.opp.player_type in ["computer_ai"]:
+                            # Append probs to opp's memory:
+                            opp_ai.memory["opp_choices"].append(probs)
+                    if gs.opp.player_type in ["computer_ai"]:  # Player without turn priority tries to predict the action probs of the player with turn priority
+                        if gs.me.name == "hero":
+                             _, _, _ = opp_ai.sample_action(gs, training=train_monster, predicting=True)
+                        elif gs.me.name == "monster":
+                            _, _, _ = opp_ai.sample_action(gs, training=train_hero, predicting=True)
                     # Create the action
                     action = create_action(gs, choice_number)
                     # Test if legal
@@ -2460,10 +2445,10 @@ class Main:
                             print(f"Executing action: {type(action).__name__} [{choice_number}]")
                         action.enact()
                         # Append action results (reward).
-                        me_ai.memory["long_term_rewards"].append(torch.tensor(gs.long_term_reward(me_ai.name, self.tempo_weight), dtype=torch.float32))
                         me_ai.memory["short_term_rewards"].append(torch.tensor(gs.short_term_reward(me_ai.name, self.tempo_weight), dtype=torch.float32))
+                        me_ai.memory["long_term_rewards"].append(torch.tensor(gs.long_term_reward(me_ai.name, self.tempo_weight), dtype=torch.float32))
                         if gs.winner:  # If game is terminal, add opponent's game-end reward to their final reward
-                            opp_ai.memory["long_term_rewards"][-1] += torch.tensor(gs.long_term_reward(opp_ai.name, tempo_weight=0.0))
+                            opp_ai.memory["long_term_rewards"][-1] += torch.tensor(gs.long_term_reward(opp_ai.name, tempo_weight=0.0))  # Tempo weight 0 is necessary for calculating game-end rewards properly.
                         if display:
                             print(f"Action Tempo: {gs.tempo}")
                             if gs.killer_combo:
@@ -2493,22 +2478,24 @@ class Main:
                 print("T", end="")
 
         # After the game, option to train AI on results, and at the same time, get loss data:
-        if gs.hero.player_type in ["computer_ai", "computer_mind_control"] and train_hero:
+        train_predictions = True if gs.hero.player_type in ["computer_ai"] and gs.monster.player_type in ["computer_ai"] else False
+
+        if gs.hero.player_type in ["computer_ai"] and train_hero:
             if train_only_on_wins and gs.winner != "hero":
                 self.hero_loss_data.extend([0] * self.hero_ai.epochs)
                 self.hero_ai.reset_memory()
             else:
-                self.hero_loss_data.extend(self.hero_ai.train_network())
+                self.hero_loss_data.extend(self.hero_ai.train_network(train_predictions))
         else:
             self.hero_loss_data.extend([0] * self.hero_ai.epochs)  # So that the graphs don't break if player isn't an ai
             self.hero_ai.reset_memory()
 
-        if gs.monster.player_type in ["computer_ai", "computer_mind_control"] and train_monster:
+        if gs.monster.player_type in ["computer_ai"] and train_monster:
             if train_only_on_wins and gs.winner != "monster":
                 self.monster_loss_data.extend([0] * self.monster_ai.epochs)
                 self.monster_ai.reset_memory()
             else:
-                self.monster_loss_data.extend(self.monster_ai.train_network())
+                self.monster_loss_data.extend(self.monster_ai.train_network(train_predictions))
         else:
             self.monster_loss_data.extend([0] * self.monster_ai.epochs)
             self.monster_ai.reset_memory()
@@ -2569,7 +2556,7 @@ class Main:
 
         return hero_score, monster_score
 
-    def train_on_population(self, best_of=1, use_mcontrol=False):
+    def train_on_population(self, best_of=1):
         # This is the same kind of training loop what was used in AlphaZero and AlphaGo, where the AI trains against a pool of past opponents.
         start_time = time.time()
         hero_score = 0
@@ -2577,8 +2564,6 @@ class Main:
 
         for i in range(best_of):
             opponent_pool = None
-
-            hero_mcontrol, monster_mcontrol = False, False
             # Alternate training between Hero and Monster:
             if i % 2:
                 # Hero is training, Monster is frozen opponent
@@ -2586,16 +2571,12 @@ class Main:
                 opponent_ai = self.monster_ai
                 oppponent_pool = self.monster_pool
                 train_hero, train_monster = True, False
-                if use_mcontrol:
-                    hero_mcontrol, monster_mcontrol = True, False  # This is so that the AIs always train against an opponent with no Mind Control (realistic training)
             else:
                 # Monster is training, Hero is frozen opponent
                 learner_ai = self.monster_ai
                 opponent_ai = self.hero_ai
                 oppponent_pool = self.hero_pool
                 train_hero, train_monster = False, True
-                if use_mcontrol:
-                    hero_mcontrol, monster_mcontrol = False, True
 
             if opponent_pool:
                 random_weights = random.choice(oppponent_pool)
@@ -2605,9 +2586,7 @@ class Main:
                                 player_type_monster=self.training_monster_type, 
                                 display=self.training_display, 
                                 train_hero=train_hero, 
-                                train_monster=train_monster,
-                                hero_mcontrol=hero_mcontrol,
-                                monster_mcontrol=monster_mcontrol)
+                                train_monster=train_monster)
 
             if (i+1) % self.save_frequency == 0:
                 # print(f"Saving AI weights at game {i+1}")
@@ -2711,7 +2690,11 @@ class Main:
         return hero_score, monster_score
 
     def do_testing_loop(self, best_of=1):
-        # After training, test against computer_random as benchmark with "greedy" temp settings
+        # After training, test against opponent with "greedy" temp settings (no training)
+        main.hero_ai.temperature = 0.0001
+        main.monster_ai.temperature = 0.0001
+        main.hero_training = False
+        main.monster_training = False
         hero_score = 0
         monster_score = 0
         for _ in range(best_of):
@@ -2800,7 +2783,6 @@ hyperparameters = {
     # Reward shaping:
     "long_term_gamma": 0.95,  # Lower values decay the end-of-game reward to earlier turns faster
     "short_term_gamma": 0.7,
-    "negative_reward_clamp": float('-inf'),  # Clamp negative rewards to this value to make them less punishing. All rewards below this value are set to this value (set to float('-inf') to disable)
     # Learning rate parameters (LR scheduler):
     "lr":1e-3,  # For 5 or more epochs, use 1e-4; for 1 epoch use 1e-3 (no scheduler)
     "use_lr_scheduler": True,  # lr scheduler (cosine annealing)
@@ -2811,9 +2793,8 @@ hyperparameters = {
     "dropout_rate": 0.3,  # Randomly disables X% neurons during forward pass. Reduces overfitting, but too high a value adds a lot of noise to the loss.
     "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights.
     "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed.
-    "temperature": 2,  # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
-    "entropy_coef": 0.015,  # Higher values slow down learning, increase exploration, and slow convergence.
-    "prediction_loss_coef": 1  # Set to 0 to turn off prediction training (training on predicting the next gamestate, also known as making a world model)
+    "temperature": 1, # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
+    "entropy_coef": 0.01,  # Higher values slow down learning, increase exploration, and slow convergence.
 }
 
 game_settings = {
@@ -2831,7 +2812,6 @@ game_settings = {
     "pool_size": 30,  # How many AI weights to keep in the pool for training
     "save_frequency": 30,
     # Testing parameters:
-    "testing_best_of": 1,
     "testing_hero_type": "computer_ai",
     "testing_monster_type": "computer_ai",
     "testing_display": True,
