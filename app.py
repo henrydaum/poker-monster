@@ -217,15 +217,6 @@ def start_game():
     hero_deck, monster_deck = build_decks()
     hero = Player("hero", hero_deck, hero_player_type)
     monster = Player("monster", monster_deck, monster_player_type)
-
-    # Difficulty adjustment: add power savings for Hard mode
-    monster.game_mode = 0
-    hero.game_mode = 0
-    if difficulty == 2:
-        if user_role == "hero":
-            monster.game_mode = 1
-        else:
-            hero.game_mode = 1
     
     going_first = "hero" if random.randint(0, 1) == 1 else "monster"
     if going_first == "hero":
