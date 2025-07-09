@@ -94,6 +94,9 @@ def get_display_info(gs):
         },
         "cache": [c.to_dict() for c in gs.cache],
         "special_info": None, # Placeholder for conditional information
+        "image_urls": {
+            "static_path": url_for('static', filename='')
+        }
     }
 
     # Special Info:
@@ -127,9 +130,11 @@ def get_available_actions(gs):
     actions = []
 
     def format_text(text):
-        spaced_text = re.sub(r'(\B[A-Z])', r' \1', text)
-        lower_text = spaced_text.lower()
-        return lower_text.capitalize()
+        text = re.sub(r'(\B[A-Z])', r' \1', text)
+        text = text.lower()
+        text = text.replace("hero", "Hero")
+        text = text.replace("monster", "Monster")
+        return text.capitalize()
 
     for action_id in range(num_actions):  # Assuming 20 possible actions
         # print("Creating action: ", action_id)
@@ -171,13 +176,9 @@ def take_ai_turn(gs, prev_rnn_state):
     while gs.winner is None and gs.me.player_type.startswith("computer"):
         if gs.me.player_type in ["computer_ai"]:
             current_ai = hero_ai if gs.me.name == "hero" else monster_ai
-            
             choice_number, new_rnn_state, _ = current_ai.sample_action(gs, prev_rnn_state, training=False)
-
             prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
-
             action = create_action(gs, choice_number)
-            
             action.enact() # This function modifies gs in place
     return gs, new_rnn_state
 
@@ -268,14 +269,14 @@ def game():
     
     return render_template("game.html", info=game_info, actions=available_actions, player_role=player_role_class, background_image=background_image)
 
-@app.route("/submit_action", methods=["POST"])
-def submit_action():    
+@socketio.on("submit_action")
+def submit_action(data):    
     # Load state from session
     gs = GameState.from_dict(session["gs"])
     prev_rnn_state = deserialize_rnn_state(session.get("rnn_state"))
 
     # Get action_id from the form submission
-    action_id = int(request.form["action_id"])
+    action_id = int(data["action_id"])
     print(f"Action ID chosen: {action_id}")
 
     # Before enacting, give enemy AI a chance to predict your move:
@@ -291,17 +292,21 @@ def submit_action():
     # If the game isn't over, let the AI take its turn
     if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
         gs, rnn_state = take_ai_turn(gs, rnn_state)
-    print(gs.opp.last_turn_log)
+        print(gs.opp.last_turn_log)
+
+    # Save updated state back to session
+    session["gs"] = gs.to_dict()
+    session["rnn_state"] = serialize_rnn_state(rnn_state)
 
     if gs.winner:
         # If there's a winner, store it in the session and redirect to the main page
         session["winner"] = gs.winner
-        return redirect(url_for("choice_screen"))
+        emit('game_over', {'winner': gs.winner})
     else:
         # If no winner, save the updated state and redirect back to the game board
-        session["gs"] = gs.to_dict()
-        session["rnn_state"] = serialize_rnn_state(rnn_state)
-        return redirect(url_for("game"))
+        game_info = get_display_info(gs)
+        available_actions = get_available_actions(gs)
+        emit('update_game', {'info': game_info, 'actions': available_actions})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    socketio.run(app, debug=True)
