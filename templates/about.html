@@ -21,17 +21,16 @@
         <p>
             <h4>Poker Monster is a fun and profoundly simple turn-based strategy card game, with a theme of good versus evil.</h4>
 
-            <h4>It is a game of hidden information and bluffing. (For those who have played it, Poker Monster is like a distillation of Magic: The Gathering into a 40-card format. Instead of mana cards, each card can be played face-down to create a 'power card'—the rest of the rules will be very familiar.)</h4>
-            
             <h4>It took a year to develop the rules of the game and perfect them. Originally, this was a physical card game with actual cards, but it has since been computerized and hosted on this website.</h4>
             
             <h2>About the AI</h2>
             <h4>There is an AI that has been developed for users to play against on this website. It is a deep artificial recurrent neural network with almost a million parameters that has been trained on a GPU for tens of thousands of games. It learned everything it knows through self-play reinforcement learning. The code itself was written in Python using the PyTorch library.</p> 
-            The full open-source code is available on GitHub: github.com/henrydaum/poker-monster</h4>
-            
+                The full open-source code is available on GitHub: github.com/henrydaum/poker-monster</h4>
+                
             <h2>How to Play Poker Monster</h2>
-
-            <h4>Please note: This game is very easy to play on this website. All you have to do is click on the blue buttons—the website takes care of everything else. You do not need to read the rest of the rules. My best advice is to just jump into the game—you will learn the rules as you go.</h4>
+                
+            <h4>Please note: The game is very easy to play on this website. All you have to do is click on the blue buttons—the website takes care of everything else rules-wise. You do not need to read the rest of the rules to play the game. My best advice is to just jump into the game.</h4>
+            <h4>For those who have played it, Poker Monster is like a distillation of Magic: The Gathering into a 40-card format. Instead of mana cards, each card can be played face-down to create a 'power card'—the rest of the rules will be very familiar.</h4>
 
             <h4>Object/ways to win: Each player starts with 15 health, and a 20-card deck. The first player to run out of health or cards in their deck loses the game.</p>
             To start the game: Each player chooses the deck they want to play (red = Monster, green = Hero). Flip a coin to see who goes first. Both players shuffle their decks and draw 4 cards. Finally, the person going first starts.</p>
@@ -39,10 +38,12 @@
             Note: The player going first doesn't draw a card on their initial turn.</p>
             Card rules: Any card can be played face-up or face-down. Face-down cards are known as power cards, and these give the power needed to play cards face-up. In this way, every card has a dual usage. To play a power card, simply take any card from your hand and place it onto the board face-down. When you do this, you have made a power card. Face-up cards are different. While power cards are hidden from your opponent, face-up cards are revealed as you play them. To do this requires power, which is explained below. To play a card from your hand in the face-up configuration, simply pay its power cost, then follow its text. Each card basically does what it says, except short cards are discarded after use, while long cards remain on the board until killed (their health is at the bottom), and then are discarded.</p>
             You can (and should, in the early turns of the game) play 1 power card per turn, but it's not required. You can play any number of face-up cards you have power for.</p>
-            Power: The power cost to play a face-up card is in the top-right corner of the card. Power is given by power cards; when you play a power card, you get 1 power, and when your turn starts, you get 1 power for each power card you control.</p>
-            Power resets to 0 when the turn ends. There is a maximum hand size of 5: cards must be discarded to be below this at the end of the turn.</h4>
+            Power: The power cost to play a face-up card is in the top-right corner of the card. Power is given by power cards; when you play a power card, you get 1 power, and when your turn starts, you get 1 power for each power card you control. Power resets to 0 when the turn ends.</p>
+            There is a maximum hand size of 5: cards must be discarded to be below this at the end of the turn.</h4>
             
             <h4>The credit for the name of the game goes to my father and the art was created by my sister.</h4>
+        
+            <a href="https://coff.ee/henrydaum">Buy me a coffee, if you like this game?</a>
         </p>
         <br>
         <a href="{{ url_for('choice_screen') }}">Back to Home</a>
