@@ -1,7 +1,8 @@
-from flask import Flask, render_template, redirect, url_for, session, request
+from flask import Flask, render_template, redirect, url_for, session, request, request
 from flask_session import Session
 from flask_socketio import SocketIO, emit
 from datetime import timedelta
+from time import sleep
 import os
 import torch
 import random
@@ -70,7 +71,6 @@ def get_display_info(gs):
     else:
         my_turn_number = (gs.turn_number + 1) / 2
     
-    # Base player information
     info = {
         "turn_number": int(my_turn_number),
         "turn_priority": gs.turn_priority,
@@ -136,50 +136,56 @@ def get_available_actions(gs):
         text = text.replace("monster", "Monster")
         return text.capitalize()
 
-    for action_id in range(num_actions):  # Assuming 20 possible actions
-        # print("Creating action: ", action_id)
-        action = create_action(gs, action_id)
-        legal, error = action.is_legal()
+    if gs.me.player_type != "person":
+        actions.append({"id": 0, "name": "Enemy Turn in Progress"})
+    else:
+        for action_id in range(num_actions):
+            # print("Creating action: ", action_id)
+            action = create_action(gs, action_id)
+            legal, error = action.is_legal()
 
-        if legal:
-            extra_info = ""
-            action_name = type(action).__name__  # Get the class name
-            if action_name in "SelectFromHand":
-                extra_info = f"- {action.resolving_card.name}" if action.card_list else ""
-            if action_name == "SelectFromBattlefield":
-                extra_info = f"- {action.target.name}" if action.card_list else ""
-            if action_name == "SelectFromOwnBattlefield":
-                extra_info = f"- {action.sacrifice.name}" if action.card_list else ""
-            if action_name == "SelectFromOppHand":
-                extra_info = f"- {action.discard.name}" if action.card_list else ""
-            if action_name == "SelectFromDeckTop2":
-                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
-            if action_name == "SelectFromGraveyard":
-                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
-            if action_name == "SelectFromDeck":
-                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
-            if action_name == "SelectFromUltimatum":
-                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
-            if action_name == "SelectFromDeckTop3":
-                extra_info = f"- {action.selected_card.name}" if action.card_list else ""
-            total_string = format_text(action_name) + " " + extra_info
-            actions.append({"id": action_id, "name": total_string})
-        elif error != ERROR_INVALID_SELECTION:  # QOL, error invalid shows up too often and don't need to see it
-            total_string = "(Invalid) - " + error
-            actions.append({"id": action_id, "name": total_string})
+            if legal:
+                extra_info = ""
+                action_name = type(action).__name__  # Get the class name
+                if action_name in "SelectFromHand":
+                    extra_info = f"- {action.resolving_card.name}" if action.card_list else ""
+                elif action_name == "SelectFromBattlefield":
+                    extra_info = f"- {action.target.name}" if action.card_list else ""
+                elif action_name == "SelectFromOwnBattlefield":
+                    extra_info = f"- {action.sacrifice.name}" if action.card_list else ""
+                elif action_name == "SelectFromOppHand":
+                    extra_info = f"- {action.discard.name}" if action.card_list else ""
+                elif action_name == "SelectFromDeckTop2":
+                    extra_info = f"- {action.selected_card.name}" if action.card_list else ""
+                elif action_name == "SelectFromGraveyard":
+                    extra_info = f"- {action.selected_card.name}" if action.card_list else ""
+                elif action_name == "SelectFromDeck":
+                    extra_info = f"- {action.selected_card.name}" if action.card_list else ""
+                elif action_name == "SelectFromUltimatum":
+                    extra_info = f"- {action.selected_card.name}" if action.card_list else ""
+                elif action_name == "SelectFromDeckTop3":
+                    extra_info = f"- {action.selected_card.name}" if action.card_list else ""
+                total_string = format_text(action_name) + " " + extra_info
+                actions.append({"id": action_id, "name": total_string})
+            elif error != ERROR_INVALID_SELECTION:  # QOL, error invalid shows up too often and don't need to see it
+                total_string = "(Invalid) - " + error
+                actions.append({"id": action_id, "name": total_string})
     
     return actions
 
-def take_ai_turn(gs, prev_rnn_state):
+def take_ai_turn(gs, prev_rnn_state, sid=None):
     """Processes the AI's turn, managing its hidden state."""
     # This loop handles cases where the AI might take multiple actions in a row
-    while gs.winner is None and gs.me.player_type.startswith("computer"):
-        if gs.me.player_type in ["computer_ai"]:
-            current_ai = hero_ai if gs.me.name == "hero" else monster_ai
-            choice_number, new_rnn_state, _ = current_ai.sample_action(gs, prev_rnn_state, training=False)
-            prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
-            action = create_action(gs, choice_number)
-            action.enact() # This function modifies gs in place
+    while gs.winner is None and gs.me.player_type == "computer_ai":
+        sleep(0.25)
+        current_ai = hero_ai if gs.me.name == "hero" else monster_ai
+        choice_number, new_rnn_state, _ = current_ai.sample_action(gs, prev_rnn_state, training=False)
+        prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
+        action = create_action(gs, choice_number)
+        action.enact() # This function modifies gs in place
+        game_info = get_display_info(gs)
+        available_actions = get_available_actions(gs)
+        socketio.emit('update_game', {'info': game_info, 'actions': available_actions}, to=sid)
     return gs, new_rnn_state
 
 @app.route("/")
@@ -220,6 +226,9 @@ def start_game():
         hero_player_type, monster_player_type = "computer_ai", "person"
     else:
         return redirect(url_for("choice_screen"))
+
+    hero_ai.reset_memory()
+    monster_ai.reset_memory()
     
     hero_deck, monster_deck = build_decks()
     hero = Player("hero", hero_deck, hero_player_type)
@@ -291,7 +300,7 @@ def submit_action(data):
 
     # If the game isn't over, let the AI take its turn
     if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
-        gs, rnn_state = take_ai_turn(gs, rnn_state)
+        gs, rnn_state = take_ai_turn(gs, rnn_state, sid=request.sid)
         print(gs.opp.last_turn_log)
 
     # Save updated state back to session
@@ -301,7 +310,7 @@ def submit_action(data):
     if gs.winner:
         # If there's a winner, store it in the session and redirect to the main page
         session["winner"] = gs.winner
-        emit('game_over', {'winner': gs.winner})
+        emit('game_over', {'winner': gs.winner}, to=request.sid)
     else:
         # If no winner, save the updated state and redirect back to the game board
         game_info = get_display_info(gs)
