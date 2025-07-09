@@ -1,5 +1,6 @@
 from flask import Flask, render_template, redirect, url_for, session, request
 from flask_session import Session
+from flask_socketio import SocketIO, emit
 from datetime import timedelta
 import os
 import torch
@@ -24,6 +25,9 @@ from poker_monster import (
 app = Flask(__name__)
 # A secret key is required to use sessions
 app.secret_key = 'a_very_secret_key'
+
+# For live updates:
+socketio = SocketIO(app)
 
 # This uses Flask Session to run the cookie on the server side (the gamestate + hidden state is too large for browser)
 app.config["SESSION_PERMANENT"] = False
@@ -122,7 +126,7 @@ def get_display_info(gs):
 def get_available_actions(gs):
     actions = []
 
-    def add_spaces(text):
+    def format_text(text):
         spaced_text = re.sub(r'(\B[A-Z])', r' \1', text)
         lower_text = spaced_text.lower()
         return lower_text.capitalize()
@@ -153,7 +157,7 @@ def get_available_actions(gs):
                 extra_info = f"- {action.selected_card.name}" if action.card_list else ""
             if action_name == "SelectFromDeckTop3":
                 extra_info = f"- {action.selected_card.name}" if action.card_list else ""
-            total_string = add_spaces(action_name) + " " + extra_info
+            total_string = format_text(action_name) + " " + extra_info
             actions.append({"id": action_id, "name": total_string})
         elif error != ERROR_INVALID_SELECTION:  # QOL, error invalid shows up too often and don't need to see it
             total_string = "(Invalid) - " + error
@@ -192,17 +196,22 @@ def choice_screen():
         random_background = None
         print("Warning: 'static/backgrounds' folder not found.")
     
-    winner = session.pop('winner', None)
+    winner = session.pop("winner", None)
 
     session["background_image"] = random_background
     
-    return render_template('index.html', winner=winner, background_image=random_background)
+    return render_template("index.html", winner=winner, background_image=random_background)
+
+@app.route("/about")
+def about():
+    """Renders the about page."""
+    background_image = session["background_image"]
+    return render_template("about.html", background_image=background_image)
 
 @app.route("/start_game")
 def start_game():
     """Initializes a new game based on the user's role choice."""
     user_role = request.args.get("role")
-    difficulty = int(request.args.get("difficulty", 0))
 
     if user_role == "hero":
         hero_player_type, monster_player_type = "person", "computer_ai"
@@ -221,13 +230,14 @@ def start_game():
     else:
         monster.going_first = True
     
+    # Initialize gamestate
     gs = GameState(hero, monster, going_first, PHASE_AWAITING_INPUT, cache=[])
     gs.hero.shuffle()
     gs.monster.shuffle()
     gs.hero.draw(4)
     gs.monster.draw(4)
 
-    # Initialize a blank hidden state for the AIs
+    # Initialize a blank hidden state for the AI
     h0 = torch.zeros(hyperparameters["num_rnn_layers"], hyperparameters["rnn_size"])
     rnn_state = h0
 
@@ -243,35 +253,23 @@ def start_game():
 
 @app.route("/game")
 def game():
-    if "gs" not in session:
-        return redirect(url_for("choice_screen"))
-
     gs = GameState.from_dict(session["gs"])
 
     if gs.winner:
-        session.pop('background_image', None) # Clear background on game over
-        session['winner'] = gs.winner
+        session.pop("background_image", None) # Clear background on game over
+        session["winner"] = gs.winner
         return redirect(url_for("choice_screen"))
 
-    player_role_class = ""
-    if gs.hero.player_type == 'person':
-        player_role_class = 'player-is-hero'
-    elif gs.monster.player_type == 'person':
-        player_role_class = 'player-is-monster'
-    
     # Get the necessary info to display
     game_info = get_display_info(gs)
     available_actions = get_available_actions(gs)
-
-    background_image = session.get('background_image', '')
+    player_role_class = "player-is-hero" if gs.hero.player_type == "person" else "player-is-monster"
+    background_image = session.get("background_image", "")
     
     return render_template("game.html", info=game_info, actions=available_actions, player_role=player_role_class, background_image=background_image)
 
 @app.route("/submit_action", methods=["POST"])
-def submit_action():
-    if "gs" not in session:
-        return redirect(url_for("choice_screen"))
-    
+def submit_action():    
     # Load state from session
     gs = GameState.from_dict(session["gs"])
     prev_rnn_state = deserialize_rnn_state(session.get("rnn_state"))

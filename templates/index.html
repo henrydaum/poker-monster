@@ -30,6 +30,9 @@
         <h1>Welcome to Poker Monster</h1>
             <h3>A game by Henry Daum,<br>with art by Charlotte Daum</h3>
 
+        <p><a href="{{ url_for('about') }}">About the Game & AI</a></p>
+        <hr>
+
         {% if winner %}
             <h2 class="winner-announcement">Game Over! Winner: {{ winner.upper() }}</h2>
             <div class="restart-button">
