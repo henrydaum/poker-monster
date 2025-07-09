@@ -1725,11 +1725,6 @@ def display_info(gs):
         print("Monster's Pawn buff is active")
     if gs.cache:
         print(f"\033[96mCache: {[card.name for card in gs.cache]}")
-    # if gs.turn_history:
-    #     move_tuple = gs.turn_history[0]
-    #     phase_id = move_tuple[0]
-    #     action_id = move_tuple[1]
-    #     print(f"\033[96mPrevious Move: {phase_id} {action_id}")
     # Reset the colors
     print("\033[0m")  
 
@@ -1813,7 +1808,7 @@ def encode_1hot(card_list, name):
         one_hot_vector = [0] * num_cards  # or 40 or 20 unique cards
         for card in card_list:
             index = card.uid  # 40 or 20 cards by uid
-            one_hot_vector[index] += 1
+            one_hot_vector[index] = 1
         if name == "monster":
             one_hot_vector = one_hot_vector[:-(num_cards/2)]  # This cuts down on a lot of useless just-zero slots
         return one_hot_vector
@@ -1848,17 +1843,16 @@ def encode_action_1hot(action_id=None):
     return one_hot_vector
 
 def gs_to_vector(gs, name, show_reveals=True, show_phase=True, show_cache=True):
-    """Populate a vector with everything a player can see - with one-hots - so computers/ais can read it easily in the upcoming model functions."""
+    """Populate a vector with everything a player can see - with one-hots - so computers/ais can read it easily in the upcoming model functions.
+    The hard part is encoding hidden information such that there is no cheating via seeing information that cannot be seen."""
     xh = []  # x input vector for Hero (h for concision)
     xm = []  # x input vector for Monster (m)
 
     opp_name = "monster" if name == "hero" else "hero"
+    is_my_turn = True if name == gs.turn_priority else False  # Card-specific reveals and the cache are not visible during the opponent's turn (it would be cheating)
 
     # First, the information that applies to both
     for x in [xh, xm]:
-        # Whose turn it is:
-        x += [1] if gs.turn_priority == "hero" else [0]
-
         # There are 5 zones per player: hand, deck, power cards, graveyard, and battlefield
         # Friendly zones:
         x += [len(gs.me.hand)/6]
@@ -1900,10 +1894,10 @@ def gs_to_vector(gs, name, show_reveals=True, show_phase=True, show_cache=True):
 
         # Misc.:
         x += [gs.me.health/29, gs.opp.health/29, gs.me.power/6, gs.me.power_plays_left, gs.uncertainty/32, gs.me.action_number/40,
-            int(gs.me.monsters_pawn_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first), gs.turn_number/15, 
+            int(gs.me.monsters_pawn_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first), gs.turn_number/15, int(is_my_turn),
             int(gs.card_played_this_turn), int(gs.short_card_played_this_turn), gs.short_term_reward(gs.me.name), gs.long_term_reward(gs.me.name)]  # Some of these values have been somewhat arbitrarily scaled to around 1 - this should help the AI
 
-        # Hand total and average power cost:
+        # Hand power cost (total and average):
         x += [(sum(card.power_cost for card in gs.me.hand))/6]
         x += [(sum(card.power_cost for card in gs.me.hand) / (len(gs.me.hand) + 1e-9))/6]
 
@@ -1940,39 +1934,41 @@ def gs_to_vector(gs, name, show_reveals=True, show_phase=True, show_cache=True):
         if show_reveals:  # This puts all of the situational reveal cards in the same few vector spots, which might not be ideal, but it saves resources.
             # Reconsider
             revealed = []
-            if gs.game_phase == PHASE_REORDERING_DECK_TOP3:
-                revealed = gs.me.deck[:3]
-            # Noble Sacrifice
-            elif gs.game_phase == PHASE_DISCARDING_CARD_FROM_OPP_HAND:
-                revealed = gs.opp.hand
-            # Ultimatum 1
-            elif gs.game_phase == PHASE_CHOOSING_ULTIMATUM_CARD:
-                revealed = gs.me.deck
-            # Ultimatum 2
-            elif gs.game_phase == PHASE_OPP_CHOOSING_FROM_ULTIMATUM:
-                revealed = gs.cache[1:3]
-            # Peek
-            elif gs.game_phase == PHASE_CHOOSING_FROM_DECK_TOP2:
-                revealed = gs.me.deck[:2]
+            if is_my_turn:
+                if gs.game_phase == PHASE_REORDERING_DECK_TOP3:
+                    revealed = gs.me.deck[:3]
+                # Noble Sacrifice
+                elif gs.game_phase == PHASE_DISCARDING_CARD_FROM_OPP_HAND:
+                    revealed = gs.opp.hand
+                # Ultimatum 1
+                elif gs.game_phase == PHASE_CHOOSING_ULTIMATUM_CARD:
+                    revealed = gs.me.deck
+                # Ultimatum 2
+                elif gs.game_phase == PHASE_OPP_CHOOSING_FROM_ULTIMATUM:
+                    revealed = gs.cache[1:3]
+                # Peek
+                elif gs.game_phase == PHASE_CHOOSING_FROM_DECK_TOP2:
+                    revealed = gs.me.deck[:2]
             x += encode_1hot(revealed, name)
-
-        # Next need to encode the current game phase:
-        if show_phase:
-            phase_id = game_phases.index(gs.game_phase)
-            x += [phase_id/15]
-            x += encode_game_phase_1hot(phase_id)
 
         # It's also possible to add the cache to the mix:
         if show_cache:
             max_size = 4  # The maximum number is to accomodate Last Stand and Reconsider, which can select 3 cards plus the card itself = 4
             # This encodes the order of the cache, which does matter.
             for i in range(max_size):
-                if i < len(gs.cache):
+                if i < len(gs.cache) and is_my_turn:  # Cache is hidden if predicting
                     card = gs.cache[i]
-                    vec = encode_1hot([card], "hero")  # Always encode full size
+                    vec = encode_1hot([card], "hero")  # Always encode full size using name "hero"
                 else:
                     vec = [0] * len(card_data)  # <-- change this if changing to uid-focused one-hots
-                x += vec 
+                x += vec
+            x += [len(gs.cache)/4]
+
+        # Next need to encode the current game phase:
+        if show_phase:
+            phase_id = game_phases.index(gs.game_phase)
+            x += [phase_id/15]
+            x += encode_game_phase_1hot(phase_id)
 
         # All of the above are mostly essential.
 
@@ -2109,18 +2105,20 @@ class Network(nn.Module):
         # Removes illegal actions from the NN output logits, for before applying softmax, while also finding the tempos for each action (that will be added to the input vector)
         mask = torch.tensor([0] * (num_actions-1), dtype=torch.float32).to(device)  # Must make everything used in PyTorch computations a tensor like this.
         tempos = torch.tensor([0] * (num_actions-1), dtype=torch.float32).to(device)
-        # Check every action_id
-        for i in range(num_actions - 1):  # This loop is kind of slow but it's the only way.
-            # Make an action
-            action = create_action(gs, i)
-            # Check if action is legal
-            legal, reason = action.is_legal()
-            # If not legal, set mask index to -infinity; -infinity becomes probability 0 in softmax (won't be picked)
-            if not legal:
-                mask[i] = float('-inf')
-                tempos[i] = -2  # Large negative value
-            if legal:
-                tempos[i] = action.predict_tempo()/4  # Only simulate for legal tempos, or it breaks. Normalized by dividing by 4.
+        is_my_turn = True if self.name == gs.turn_priority else False
+        if is_my_turn:  # If you are predicting the enemy turn, you don't have the privelage of knowing what actions are legal (that would require knowing hidden info) and their respective tempos
+            # Check every action_id
+            for i in range(num_actions - 1):  # This loop is kind of slow but it's the only way.
+                # Make an action
+                action = create_action(gs, i)
+                # Check if action is legal
+                legal, reason = action.is_legal()
+                # If not legal, set mask index to -infinity; -infinity becomes probability 0 in softmax (won't be picked)
+                if not legal:
+                    mask[i] = float('-inf')
+                    tempos[i] = -2  # Large negative value
+                if legal:
+                    tempos[i] = action.predict_tempo()/4  # Only simulate for legal tempos, or it breaks. Normalized by dividing by 4.
         # Return masked logits
         return mask, tempos  # Save mask for training since making actions is intensive and saving gs is a bad idea
 
@@ -2174,7 +2172,7 @@ class Network(nn.Module):
                     self.memory["predictions"].append(probs)
                     # print(f"Predictions len {self.name}: {len(self.memory['predictions'])}")
                     # print(f"Opp_choices len {self.name}: {len(self.memory['opp_choices'])}")
-            self.memory["rnn_states"].append(new_rnn_state)
+                self.memory["rnn_states"].append(new_rnn_state)
 
             return action_id, new_rnn_state, probs.detach()  # new_rnn_state must be passed for the website and saved in the session.
 
@@ -2203,9 +2201,6 @@ class Network(nn.Module):
         # All of the actions that took place are recomputed N times, where N is the number of epochs, if N is greater than 1. If N=1, the data was computed during sample_action.
         # This applies the learning algorithm N times to optimize for the algorithm called 'REINFORCE'
         losses = []  # Will be returned to make a graph later
-
-        # print(f"Predictions len: {len(self.memory['predictions'])}")
-        # print(f"Opp_choices len: {len(self.memory['opp_choices'])}")
 
         # These are vectorized representations for every step, retreived from memory.
         # For example, gs_vectors[0] is the gs_vector for the 0th action.
@@ -2417,39 +2412,44 @@ class Main:
                     if gs.me.player_type == "person":
                         # NEED TO CONNECT THIS TO WEBSITE HERE (2/2)
                         choice_number = int(input("Choose an action: "))  # int from 0 to num_actions - 1
+
                     # For a random opponent:
                     elif gs.me.player_type == "computer_random":
                         choice_number = randint(0, num_actions - 2)  # -2 because cancel is not available to computers
+
                     # For a computer AI:
-                    elif gs.me.player_type in ["computer_ai"]:
+                    elif gs.me.player_type == "computer_ai":
                         # Train both AIs on the same turn
                         if gs.me.name == "hero":
                             choice_number, _, probs = me_ai.sample_action(gs, training=train_hero)
                         elif gs.me.name == "monster":
                             choice_number, _, probs = me_ai.sample_action(gs, training=train_monster)
-                        if gs.opp.player_type in ["computer_ai"]:
-                            # Append probs to opp's memory:
+                        # For training on predictions:
+                        if gs.opp.player_type == "computer_ai":
                             opp_ai.memory["opp_choices"].append(probs)
-                    if gs.opp.player_type in ["computer_ai"]:  # Player without turn priority tries to predict the action probs of the player with turn priority
+
+                    # For an enemy AI predicting YOUR actions during YOUR turn:
+                    if gs.opp.player_type == "computer_ai":  # Player without turn priority tries to predict the action probs of the player with turn priority
                         if gs.me.name == "hero":
                              _, _, _ = opp_ai.sample_action(gs, training=train_monster, predicting=True)
                         elif gs.me.name == "monster":
                             _, _, _ = opp_ai.sample_action(gs, training=train_hero, predicting=True)
+
+                    # After obtaining actions:
                     # Create the action
                     action = create_action(gs, choice_number)
                     # Test if legal
                     legal, reason = action.is_legal()
                     if legal:
                         # If legal, execute action
-                        if display:
-                            print(f"Executing action: {type(action).__name__} [{choice_number}]")
                         action.enact()
-                        # Append action results (reward).
+                        # Rewarding actions:
                         me_ai.memory["short_term_rewards"].append(torch.tensor(gs.short_term_reward(me_ai.name, self.tempo_weight), dtype=torch.float32))
                         me_ai.memory["long_term_rewards"].append(torch.tensor(gs.long_term_reward(me_ai.name, self.tempo_weight), dtype=torch.float32))
                         if gs.winner:  # If game is terminal, add opponent's game-end reward to their final reward
                             opp_ai.memory["long_term_rewards"][-1] += torch.tensor(gs.long_term_reward(opp_ai.name, tempo_weight=0.0))  # Tempo weight 0 is necessary for calculating game-end rewards properly.
                         if display:
+                            print(f"Executing action: {type(action).__name__} [{choice_number}]")
                             print(f"Action Tempo: {gs.tempo}")
                             if gs.killer_combo:
                                 print(f"Nice Killer Combo!")
@@ -2478,9 +2478,9 @@ class Main:
                 print("T", end="")
 
         # After the game, option to train AI on results, and at the same time, get loss data:
-        train_predictions = True if gs.hero.player_type in ["computer_ai"] and gs.monster.player_type in ["computer_ai"] else False
+        train_predictions = True if gs.hero.player_type == "computer_ai" and gs.monster.player_type == "computer_ai" else False
 
-        if gs.hero.player_type in ["computer_ai"] and train_hero:
+        if gs.hero.player_type == "computer_ai" and train_hero:
             if train_only_on_wins and gs.winner != "hero":
                 self.hero_loss_data.extend([0] * self.hero_ai.epochs)
                 self.hero_ai.reset_memory()
@@ -2490,7 +2490,7 @@ class Main:
             self.hero_loss_data.extend([0] * self.hero_ai.epochs)  # So that the graphs don't break if player isn't an ai
             self.hero_ai.reset_memory()
 
-        if gs.monster.player_type in ["computer_ai"] and train_monster:
+        if gs.monster.player_type == "computer_ai" and train_monster:
             if train_only_on_wins and gs.winner != "monster":
                 self.monster_loss_data.extend([0] * self.monster_ai.epochs)
                 self.monster_ai.reset_memory()
@@ -2712,14 +2712,19 @@ class Main:
 
         return hero_score, monster_score
 
-    def save_ai_weights(self):
+    def save_ai_weights(self, autosave=False):
         # Saving the AI model
-        response = input("\nSave AI models? [y/n]: ")
-        if response == "y":
+        if autosave:
             self.hero_ai.save("hero")
             self.monster_ai.save("monster")
+            print("Models saved")
         else:
-            print("Models not saved")
+            response = input("\nSave AI models? [y/n]: ")
+            if response == "y":
+                self.hero_ai.save("hero")
+                self.monster_ai.save("monster")
+            else:
+                print("Models not saved")
 
     def plot_graphs(self):
         hero_avg_wr = mean(self.hero_game_data)
@@ -2786,7 +2791,7 @@ hyperparameters = {
     # Learning rate parameters (LR scheduler):
     "lr":1e-3,  # For 5 or more epochs, use 1e-4; for 1 epoch use 1e-3 (no scheduler)
     "use_lr_scheduler": True,  # lr scheduler (cosine annealing)
-    "T_0": 500,  # lr cosine anneal period (repeats every X games with warm restarts)
+    "T_0": 1000,  # lr cosine anneal period (repeats every X games with warm restarts)
     "T_mult": 1,  # Multiply T_0 by this factor every time it restarts (default is 1)
     "eta_min": 1e-6,  # Anneal from lr (above) to this lr
     # Misc. Parameters:
@@ -2794,7 +2799,7 @@ hyperparameters = {
     "weight_decay": 0.01,  # This is L2 regularization, adds a term to the loss calculation that punishes large weights.
     "epochs": 1,  # 1 epoch is much faster than multiple because the torch gradient isn't recomputed.
     "temperature": 1, # Adds a degree of randomness to sample_action. Lower values are deterministic, higher values are random.
-    "entropy_coef": 0.01,  # Higher values slow down learning, increase exploration, and slow convergence.
+    "entropy_coef": 0.001,  # Higher values slow down learning, increase exploration, and slow convergence.
 }
 
 game_settings = {
@@ -2809,8 +2814,8 @@ game_settings = {
     "anneal_temperature": False,
     "anneal_entropy": False,  # Linearly reduce entropy from entropy_coef to 0 over the course of training
     # Pooling parameters:
-    "pool_size": 30,  # How many AI weights to keep in the pool for training
-    "save_frequency": 30,
+    "pool_size": 200,  # How many AI weights to keep in the pool for training. Put high for large training sets.
+    "save_frequency": 50,
     # Testing parameters:
     "testing_hero_type": "computer_ai",
     "testing_monster_type": "computer_ai",

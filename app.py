@@ -8,11 +8,13 @@ import re
 from poker_monster import (
     Network, create_action, GameState, Player, build_decks, 
     hyperparameters, num_actions, 
+
     PHASE_AWAITING_INPUT, PHASE_PLAYING_SELECTED_CARD, PHASE_VIEWING_CARD_INFO,
     PHASE_SELECTING_GRAVEYARD_CARD, PHASE_REORDERING_DECK_TOP3, PHASE_DISCARDING_CARD_FROM_OPP_HAND,
     PHASE_CHOOSING_GO_ALL_IN_TARGET, PHASE_CHOOSING_FOLD_TARGET, PHASE_CHOOSING_POKER_FACE_TARGET,
     PHASE_CHOOSING_CHEAP_SHOT_TARGET, PHASE_CHOOSING_ULTIMATUM_CARD, PHASE_OPP_CHOOSING_FROM_ULTIMATUM,
     PHASE_CHOOSING_FROM_DECK_TOP2, PHASE_HAND_FULL_DISCARDING_CARD,
+
     ERROR_ENEMY_HAS_THE_SUN, ERROR_ENEMY_HAS_THE_MOON, ERROR_INVALID_SELECTION,
     ERROR_CANT_PLAY_ANOTHER_POWER_CARD, ERROR_NOT_ENOUGH_POWER, ERROR_NO_SACRIFICE,
     ERROR_MUST_PICK_DIFFERENT_CARD, ERROR_MUST_HAVE_DIFFERENT_NAME, ERROR_NO_FURTHER_MOVES,
@@ -28,9 +30,12 @@ app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 app.config["SESSION_PERMANENT"] = True
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=2)
+
 Session(app)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Initialize AIs
 hero_ai = Network(name="hero", **hyperparameters)
 monster_ai = Network(name="monster", **hyperparameters)
 hero_ai.to(device)
@@ -56,7 +61,6 @@ def deserialize_rnn_state(state_list):
 
 def get_display_info(gs):
     """Packages all relevant GameState data into a dictionary for the template."""
-
     if gs.me.going_first:
         my_turn_number = gs.turn_number / 2 + 1
     else:
@@ -165,19 +169,12 @@ def take_ai_turn(gs, prev_rnn_state):
             current_ai = hero_ai if gs.me.name == "hero" else monster_ai
             
             choice_number, new_rnn_state, _ = current_ai.sample_action(gs, prev_rnn_state, training=False)
+
             prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
 
             action = create_action(gs, choice_number)
+            
             action.enact() # This function modifies gs in place
-
-        elif gs.me.player_type == "computer_random":
-            while True:
-                choice_number = randint(0, num_actions - 2)
-                action = create_action(gs, choice_number)
-                legal, reason = action.enact()
-                if legal:
-                    break
-
     return gs, new_rnn_state
 
 @app.route("/")
@@ -283,7 +280,7 @@ def submit_action():
     action_id = int(request.form["action_id"])
     print(f"Action ID chosen: {action_id}")
 
-    # Before enacting, give AI a chance to predict your move:
+    # Before enacting, give enemy AI a chance to predict your move:
     opp_ai = monster_ai if gs.me.name == "hero" else hero_ai
     _, new_rnn_state, _ = opp_ai.sample_action(gs, training=False, prev_rnn_state=prev_rnn_state, predicting=True)
     rnn_state = new_rnn_state
