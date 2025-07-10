@@ -2,7 +2,7 @@ from flask import Flask, render_template, redirect, url_for, session, request, r
 from flask_session import Session
 from flask_socketio import SocketIO, emit
 from datetime import timedelta
-from time import sleep
+import time
 import os
 import torch
 import random
@@ -183,7 +183,8 @@ def take_ai_turn(gs, prev_rnn_state, sid=None):
     """Processes the AI's turn, managing its hidden state."""
     # This loop handles cases where the AI might take multiple actions in a row
     while gs.winner is None and gs.me.player_type == "computer_ai":
-        sleep(0.25)
+        socketio.sleep(0.25)
+        start_time = time.time()
         current_ai = hero_ai if gs.me.name == "hero" else monster_ai
         choice_number, new_rnn_state, _ = current_ai.sample_action(gs, prev_rnn_state, training=False)
         prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
@@ -192,6 +193,9 @@ def take_ai_turn(gs, prev_rnn_state, sid=None):
         game_info = get_display_info(gs)
         available_actions = get_available_actions(gs)
         socketio.emit('update_game', {'info': game_info, 'actions': available_actions}, to=sid)
+        end_time = time.time()
+        duration = end_time - start_time
+        print(f"--- DEBUG: AI action finished. Duration: {duration:.5f} seconds. ---")
     return gs, new_rnn_state
 
 @app.route("/")
@@ -261,6 +265,8 @@ def start_game():
     if gs.me.player_type.startswith("computer_ai"):
         gs, rnn_state = take_ai_turn(gs, rnn_state)
 
+    socketio.sleep(0.05)
+
     # Store the initial game and AI states in the session
     session["gs"] = gs.to_dict()
     session["rnn_state"] = serialize_rnn_state(rnn_state)
@@ -294,20 +300,28 @@ def submit_action(data):
     action_id = int(data["action_id"])
     print(f"Action ID chosen: {action_id}")
 
+    socketio.sleep(0.05)
+
     # Before enacting, give enemy AI a chance to predict your move:
     opp_ai = monster_ai if gs.me.name == "hero" else hero_ai
     _, new_rnn_state, _ = opp_ai.sample_action(gs, training=False, prev_rnn_state=prev_rnn_state, predicting=True)
     rnn_state = new_rnn_state
+    
+    socketio.sleep(0.05)
 
     # Execute the user's action
     action = create_action(gs, action_id)
     legal, reason = action.is_legal()
     action.enact() # This updates gs
 
+    socketio.sleep(0.05)
+
     # If the game isn't over, let the AI take its turn
     if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
         gs, rnn_state = take_ai_turn(gs, rnn_state, sid=request.sid)
         print(gs.opp.last_turn_log)
+
+    socketio.sleep(0.05)
 
     # Save updated state back to session
     session["gs"] = gs.to_dict()
