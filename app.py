@@ -34,7 +34,7 @@ socketio = SocketIO(app)
 # Redis for memory
 redis_url = os.getenv('REDIS_URL')
 app.config['SESSION_TYPE'] = 'redis'
-app.config['SESSION_REDIS'] = redis.from_url(redis://red-d1ng0bbipnbc73ak7j0g:6379)
+app.config['SESSION_REDIS'] = redis.from_url("redis://red-d1ng0bbipnbc73ak7j0g:6379")
 
 # This uses Flask Session to run the cookie on the server side (the gamestate + hidden state is too large for browser)
 app.config["SESSION_PERMANENT"] = False
