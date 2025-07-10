@@ -32,7 +32,7 @@ app.secret_key = 'a_very_secret_key'
 socketio = SocketIO(app)
 
 # Redis for memory
-redis_url = os.getenv("redis://red-d1ng0bbipnbc73ak7j0g:6379")
+redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
 app.config['SESSION_TYPE'] = 'redis'
 app.config['SESSION_REDIS'] = redis.from_url(redis_url)
 
