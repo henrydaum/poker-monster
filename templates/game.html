@@ -73,21 +73,6 @@
         .restart-button:hover {
             background-color: #c82333;
         }
-        #card-image-viewer {
-            position: fixed; /* Floats on top of the page */
-            display: none;   /* Hidden by default */
-            padding: 5px;
-            background: #fff;
-            border: 0px solid #333;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            z-index: 1000; /* Stays on top of everything */
-            pointer-events: none; /* Prevents the image from flickering under the mouse */
-        }
-        #card-image-viewer img {
-            display: block;
-            width: 250px; /* Or whatever width looks best for your images */
-        }
         .special-info-bar {
             position: fixed;
             bottom: 40px; /* Position it directly on top of the main footer */
@@ -167,9 +152,7 @@
         }
     </style>
 </head>
-<body class="{{ player_role }}">
-    <div id="card-image-viewer"><img src="" alt="Card Art"></div>
-        
+<body class="{{ player_role }}">       
     <div class="footer-bar">
         <div class="left">
             <h1 id="turn-info">{{ info.turn_priority.upper() }}</h1>
@@ -235,26 +218,18 @@
     document.addEventListener('DOMContentLoaded', () => {
         const socket = io();
 
-        // --- EMITTERS ---
-        document.getElementById('actions-list').addEventListener('click', (e) => {
-            if (e.target && e.target.classList.contains('action-button')) {
-                const actionId = e.target.getAttribute('data-action-id');
-                socket.emit('submit_action', { 'action_id': actionId });
+        // --- CORE FUNCTIONS ---
+
+        function kickstartAiTurnIfNeeded() {
+            const firstAction = document.querySelector('#actions-list .action-button');
+            // Check if the page loaded and the AI should move
+            if (firstAction && firstAction.textContent.includes('Enemy Turn in Progress')) {
+                console.log("Enemy turn detected on page load. Kicking off AI turn...");
+                // Emit the action with a dummy ID to start the AI loop on the server
+                socket.emit('submit_action', { 'action_id': -1 });
             }
-        });
+        }
 
-        // --- LISTENERS ---
-        socket.on('update_game', (data) => {
-            console.log('Game state updated:', data);
-            updatePage(data.info, data.actions);
-        });
-        
-        socket.on('game_over', (data) => {
-            alert(`Game Over! Winner: ${data.winner.toUpperCase()}`);
-            window.location.href = "{{ url_for('choice_screen') }}";
-        });
-
-        // --- DOM UPDATE FUNCTIONS ---
         function updatePage(info, actions) {
             document.getElementById('turn-info').textContent = `${info.turn_priority.toUpperCase()} - Turn ${info.turn_number}`;
             document.getElementById('game-phase').textContent = info.game_phase;
@@ -282,7 +257,7 @@
             
             const logContainer = document.getElementById('enemy-log');
             logContainer.innerHTML = '';
-            if (info.opp.last_turn_log.length > 0) {
+            if (info.opp.last_turn_log && info.opp.last_turn_log.length > 0) {
                 info.opp.last_turn_log.forEach((log, index) => {
                     const logItem = document.createElement('div');
                     logItem.className = 'log-item';
@@ -328,40 +303,41 @@
                 });
             }
         }
-    }); // <-- SCRIPT FIX: DOMContentLoaded now correctly wraps all listeners and functions.
 
-    // --- CARD IMAGE HOVER SCRIPT ---
-    const viewer = document.getElementById('card-image-viewer');
-    const viewerImg = viewer.querySelector('img');
+        // --- EMITTERS ---
+        document.getElementById('actions-list').addEventListener('click', (e) => {
+            if (e.target && e.target.classList.contains('action-button')) {
+                const actionId = e.target.getAttribute('data-action-id');
+                socket.emit('submit_action', { 'action_id': actionId });
+            }
+        });
 
-    function positionViewer(e) {
-        const viewerWidth = viewer.offsetWidth, viewerHeight = viewer.offsetHeight;
-        const windowWidth = window.innerWidth, windowHeight = window.innerHeight;
-        let top = e.pageY + 15, left = e.pageX + 15;
-        if (left + viewerWidth > windowWidth) left = e.pageX - viewerWidth - 15;
-        if (top + viewerHeight > windowHeight) top = e.pageY - viewerHeight - 15;
-        viewer.style.left = left + 'px';
-        viewer.style.top = top + 'px';
-    }
+        // --- LISTENERS ---
 
-    viewerImg.addEventListener('load', () => { viewer.style.display = 'block'; });
+        socket.on('connect', () => {
+            console.log("Connected to server.");
+            // This is the best place to kickstart the AI turn.
+            kickstartAiTurnIfNeeded();
+        });
+        
+        // **This is the single, corrected listener for game updates.**
+        socket.on('update_game', (data) => {
+            console.log('Game state updated:', data);
+            updatePage(data.info, data.actions);
 
-    document.querySelector('.board').addEventListener('mouseover', (e) => {
-        if (e.target.classList.contains('card')) {
-            const imageUrl = e.target.dataset.image;
-            if (imageUrl) viewerImg.src = imageUrl;
-        }
-    });
-    document.querySelector('.board').addEventListener('mouseout', (e) => {
-        if (e.target.classList.contains('card')) {
-            viewer.style.display = 'none';
-        }
-    });
-    document.querySelector('.board').addEventListener('mousemove', (e) => {
-        if (e.target.classList.contains('card')) {
-            positionViewer(e);
-        }
+            // Check if the server signaled that the AI should make a move.
+            if (data.next_action === 'ai_turn') {
+                // Wait a moment so the player can see the result of the last move.
+                setTimeout(() => {
+                    console.log("Server signaled AI turn. Requesting next AI move.");
+                    socket.emit('submit_action', { 'action_id': -1 });
+                }, 500); // 0.5-second delay.
+            }
+        });
+        
+        socket.on('game_over', (data) => {
+            alert(`Game Over! Winner: ${data.winner.toUpperCase()}`);
+            window.location.href = "{{ url_for('choice_screen') }}";
+        });
     });
 </script>
-</body>
-</html>

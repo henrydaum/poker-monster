@@ -179,25 +179,6 @@ def get_available_actions(gs):
     
     return actions
 
-def take_ai_turn(gs, prev_rnn_state, sid=None):
-    """Processes the AI's turn, managing its hidden state."""
-    # This loop handles cases where the AI might take multiple actions in a row
-    while gs.winner is None and gs.me.player_type == "computer_ai":
-        socketio.sleep(0.25)
-        start_time = time.time()
-        current_ai = hero_ai if gs.me.name == "hero" else monster_ai
-        choice_number, new_rnn_state, _ = current_ai.sample_action(gs, prev_rnn_state, training=False)
-        prev_rnn_state = new_rnn_state # Use the new state for the next potential loop
-        action = create_action(gs, choice_number)
-        action.enact() # This function modifies gs in place
-        game_info = get_display_info(gs)
-        available_actions = get_available_actions(gs)
-        socketio.emit('update_game', {'info': game_info, 'actions': available_actions}, to=sid)
-        end_time = time.time()
-        duration = end_time - start_time
-        print(f"--- DEBUG: AI action finished. Duration: {duration:.5f} seconds. ---")
-    return gs, new_rnn_state
-
 @app.route("/")
 def choice_screen():
     # Pop the winner from the session if it exists, so it only shows once.
@@ -214,9 +195,7 @@ def choice_screen():
         print("Warning: 'static/backgrounds' folder not found.")
     
     winner = session.pop("winner", None)
-
     session["background_image"] = random_background
-    
     return render_template("index.html", winner=winner, background_image=random_background)
 
 @app.route("/about")
@@ -261,12 +240,6 @@ def start_game():
     h0 = torch.zeros(hyperparameters["num_rnn_layers"], hyperparameters["rnn_size"])
     rnn_state = h0
 
-    # If the AI goes first, let it take its turn now
-    if gs.me.player_type.startswith("computer_ai"):
-        gs, rnn_state = take_ai_turn(gs, rnn_state)
-
-    socketio.sleep(0.05)
-
     # Store the initial game and AI states in the session
     session["gs"] = gs.to_dict()
     session["rnn_state"] = serialize_rnn_state(rnn_state)
@@ -278,7 +251,6 @@ def game():
     gs = GameState.from_dict(session["gs"])
 
     if gs.winner:
-        session.pop("background_image", None) # Clear background on game over
         session["winner"] = gs.winner
         return redirect(url_for("choice_screen"))
 
@@ -291,51 +263,68 @@ def game():
     return render_template("game.html", info=game_info, actions=available_actions, player_role=player_role_class, background_image=background_image)
 
 @socketio.on("submit_action")
-def submit_action(data):    
-    # Load state from session
+def submit_action(data):
+    print("\n--- 'submit_action' EVENT RECEIVED ---")
     gs = GameState.from_dict(session["gs"])
-    prev_rnn_state = deserialize_rnn_state(session.get("rnn_state"))
-
-    # Get action_id from the form submission
+    rnn_state = deserialize_rnn_state(session.get("rnn_state"))
     action_id = int(data["action_id"])
-    print(f"Action ID chosen: {action_id}")
+    print(f"Action ID: {action_id}, Current Turn: {gs.turn_priority}")
 
-    socketio.sleep(0.05)
+    next_action_signal = None
 
-    # Before enacting, give enemy AI a chance to predict your move:
-    opp_ai = monster_ai if gs.me.name == "hero" else hero_ai
-    _, new_rnn_state, _ = opp_ai.sample_action(gs, training=False, prev_rnn_state=prev_rnn_state, predicting=True)
-    rnn_state = new_rnn_state
+    # This branch runs when YOU take an action
+    if gs.me.player_type == "person":
+        print("Processing HUMAN player's turn.")
+        opp_ai = monster_ai if gs.me.name == "hero" else hero_ai
+        _, rnn_state, _ = opp_ai.sample_action(gs, training=False, prev_rnn_state=rnn_state, predicting=True)
+        action = create_action(gs, action_id)
+        action.enact() # Your move is made and the game state is updated.
+        print(f"Action enacted. New turn priority is now: {gs.turn_priority}")
+        # After your move, check if the active player is now the AI
+        if not gs.winner and gs.me.player_type == "computer_ai":
+            print(">>> Signal SET: It's now the AI's turn.")
+            next_action_signal = 'ai_turn'
+        else:
+            print(">>> Signal NOT set: Human turn continues, or game has ended.")
+
+    # This branch runs when the BROWSER requests an AI move
+    elif gs.me.player_type == "computer_ai":
+        print("Processing COMPUTER_AI's turn.")
+        start_time = time.time()
+        current_ai = hero_ai if gs.me.name == "hero" else monster_ai
+        choice_number, rnn_state, _ = current_ai.sample_action(gs, rnn_state, training=False)
+        action = create_action(gs, choice_number)
+        action.enact() # This function modifies gs in place
+        end_time = time.time()
+        duration = end_time - start_time
+        print(f"AI action finished. Duration: {duration:.5f} seconds.")
+        print(f"AI took a turn. New turn priority is now: {gs.turn_priority}")
+
+        # After the AI's move, check if it's STILL the AI's turn
+        if not gs.winner and gs.me.player_type == "computer_ai":
+            print(">>> Signal SET: AI turn continues.")
+            next_action_signal = 'ai_turn'
+        else:
+            print(">>> Signal NOT set: It is now the human's turn.")
     
-    socketio.sleep(0.05)
-
-    # Execute the user's action
-    action = create_action(gs, action_id)
-    legal, reason = action.is_legal()
-    action.enact() # This updates gs
-
-    socketio.sleep(0.05)
-
-    # If the game isn't over, let the AI take its turn
-    if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
-        gs, rnn_state = take_ai_turn(gs, rnn_state, sid=request.sid)
-        print(gs.opp.last_turn_log)
-
-    socketio.sleep(0.05)
-
-    # Save updated state back to session
+    # Save the updated state to the session
     session["gs"] = gs.to_dict()
     session["rnn_state"] = serialize_rnn_state(rnn_state)
 
+    # Check for a winner
     if gs.winner:
-        # If there's a winner, store it in the session and redirect to the main page
-        session["winner"] = gs.winner
-        emit('game_over', {'winner': gs.winner}, to=request.sid)
-    else:
-        # If no winner, save the updated state and redirect back to the game board
-        game_info = get_display_info(gs)
-        available_actions = get_available_actions(gs)
-        emit('update_game', {'info': game_info, 'actions': available_actions})
+        print(f"GAME OVER. Winner: {gs.winner}")
+        emit('game_over', {'winner': gs.winner})
+        return
+
+    # Send the update back to the browser
+    print(f"EMITTING 'update_game'. Signal is: {next_action_signal}")
+    emit('update_game', {
+        'info': get_display_info(gs),
+        'actions': get_available_actions(gs),
+        'next_action': next_action_signal
+    })
+    print("--- 'submit_action' EVENT COMPLETE ---")
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)
