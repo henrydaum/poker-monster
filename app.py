@@ -2,12 +2,12 @@ from flask import Flask, render_template, redirect, url_for, session, request, r
 from flask_session import Session
 from flask_socketio import SocketIO, emit
 from datetime import timedelta
+import psutil
 import time
 import os
 import torch
 import random
 import re
-import redis
 from poker_monster import (
     Network, create_action, GameState, Player, build_decks, 
     hyperparameters, num_actions, 
@@ -31,11 +31,6 @@ app.secret_key = 'a_very_secret_key'
 # For live updates:
 socketio = SocketIO(app)
 
-# Redis for memory
-redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
-app.config['SESSION_TYPE'] = 'redis'
-app.config['SESSION_REDIS'] = redis.from_url(redis_url)
-
 # This uses Flask Session to run the cookie on the server side (the gamestate + hidden state is too large for browser)
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
@@ -49,14 +44,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Initialize AIs
 hero_ai = Network(name="hero", **hyperparameters)
 monster_ai = Network(name="monster", **hyperparameters)
-hero_ai.to(device)
-monster_ai.to(device)
 try:  # Load hero_ai
-    hero_ai.load("hero")
+    hero_ai.load("hero", half=True)
 except Exception as e:
     print(f"Could not load hero_ai: {e}")
 try:  # Load monster_ai
-    monster_ai.load("monster")
+    monster_ai.load("monster", half=True)
 except Exception as e:
     print(f"Could not load monster_ai: {e}")
 hero_ai.temperature = 0.0001
@@ -176,7 +169,6 @@ def get_available_actions(gs):
             elif error != ERROR_INVALID_SELECTION:  # QOL, error invalid shows up too often and don't need to see it
                 total_string = "(Invalid) - " + error
                 actions.append({"id": action_id, "name": total_string})
-    
     return actions
 
 @app.route("/")
@@ -324,7 +316,22 @@ def submit_action(data):
         'actions': get_available_actions(gs),
         'next_action': next_action_signal
     })
+
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    rss_mb = mem_info.rss / (1024 * 1024)  # Resident Set Size in MB
+    print(f"Current memory usage: {rss_mb:.2f} MB")
+
     print("--- 'submit_action' EVENT COMPLETE ---")
+
+@app.route('/memory')
+def memory():
+    # Get the current process's memory usage in bytes
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    rss_mb = mem_info.rss / (1024 * 1024)  # Resident Set Size in MB
+
+    return f"Current memory usage: {rss_mb:.2f} MB"
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)

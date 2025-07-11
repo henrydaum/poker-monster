@@ -1835,12 +1835,12 @@ def encode_game_phase_1hot(phase_id=None):
         one_hot_vector[phase_id] = 1  # Instead of += 1/3... both work
     return one_hot_vector
 
-def encode_action_1hot(action_id=None):
-    """Encodes a 1hot for the action_id."""
-    one_hot_vector = [0] * (num_actions - 1)  # -1 since computers can't cancel and it would be wasted space
-    if action_id:
-        one_hot_vector[action_id] = 1
-    return one_hot_vector
+# def encode_action_1hot(action_id=None):
+#     """Encodes a 1hot for the action_id."""
+#     one_hot_vector = [0] * (num_actions - 1)  # -1 since computers can't cancel and it would be wasted space
+#     if action_id:
+#         one_hot_vector[action_id] = 1
+#     return one_hot_vector
 
 def gs_to_vector(gs, name, show_reveals=True, show_phase=True, show_cache=True):
     """Populate a vector with everything a player can see - with one-hots - so computers/ais can read it easily in the upcoming model functions.
@@ -1879,23 +1879,12 @@ def gs_to_vector(gs, name, show_reveals=True, show_phase=True, show_cache=True):
         # Differences:
         x += [len(gs.me.hand)/6 - len(gs.opp.hand)/6]
         x += [len(gs.me.deck)/16 - len(gs.opp.deck)/16]
-        x += [len(gs.me.power_cards)/6 - len(gs.opp.power_cards)/6]
-        x += [len(gs.me.graveyard)/20 - len(gs.opp.graveyard)/20]
-        x += [len(gs.me.battlefield)/8 - len(gs.opp.battlefield)/8]
         x += [gs.me.health/29 - gs.opp.health/29]
 
-        # Various ratios
-        x += [gs.me.health / (gs.opp.health + 1e-9)]
-        x += [len(gs.me.hand) / (len(gs.opp.hand) + 1e-9)]
-        x += [len(gs.me.deck) / (len(gs.opp.deck) + 1e-9)]
-        x += [len(gs.me.power_cards) / (len(gs.opp.power_cards) + 1e-9)]
-        x += [len(gs.me.graveyard) / (len(gs.opp.graveyard) + 1e-9)]
-        x += [len(gs.me.battlefield) / (len(gs.opp.battlefield) + 1e-9)]
-
         # Misc.:
-        x += [gs.me.health/29, gs.opp.health/29, gs.me.power/6, gs.me.power_plays_left, gs.uncertainty/32, gs.me.action_number/40,
+        x += [gs.me.health/29, gs.opp.health/29, gs.me.power/6, gs.me.power_plays_left, gs.uncertainty/32,
             int(gs.me.monsters_pawn_buff), int(gs.opp.last_stand_buff), int(gs.me.going_first), gs.turn_number/15, int(is_my_turn),
-            int(gs.card_played_this_turn), int(gs.short_card_played_this_turn), gs.short_term_reward(gs.me.name), gs.long_term_reward(gs.me.name)]  # Some of these values have been somewhat arbitrarily scaled to around 1 - this should help the AI
+            gs.short_term_reward(name), gs.long_term_reward(name)]  # Some of these values have been somewhat arbitrarily scaled to around 1 - this should help the AI
 
         # Hand power cost (total and average):
         x += [(sum(card.power_cost for card in gs.me.hand))/6]
@@ -1953,16 +1942,20 @@ def gs_to_vector(gs, name, show_reveals=True, show_phase=True, show_cache=True):
 
         # It's also possible to add the cache to the mix:
         if show_cache:
-            max_size = 4  # The maximum number is to accomodate Last Stand and Reconsider, which can select 3 cards plus the card itself = 4
-            # This encodes the order of the cache, which does matter.
-            for i in range(max_size):
-                if i < len(gs.cache) and is_my_turn:  # Cache is hidden if predicting
-                    card = gs.cache[i]
-                    vec = encode_1hot([card], "hero")  # Always encode full size using name "hero"
-                else:
-                    vec = [0] * len(card_data)  # <-- change this if changing to uid-focused one-hots
-                x += vec
-            x += [len(gs.cache)/4]
+            # max_size = 4  # The maximum number is to accomodate Last Stand and Reconsider, which can select 3 cards plus the card itself = 4
+            # # This encodes the order of the cache, which does matter.
+            # for i in range(max_size):
+            #     if i < len(gs.cache) and is_my_turn:  # Cache is hidden if predicting
+            #         card = gs.cache[i]
+            #         vec = encode_1hot([card], "hero")  # Always encode full size using name "hero"
+            #     else:
+            #         vec = [0] * len(card_data)  # <-- change this if changing to uid-focused one-hots
+            #     x += vec
+            # x += [len(gs.cache)/4]
+            if is_my_turn:
+                x += encode_1hot(gs.cache, "hero")
+            else:
+                x += encode_1hot([], "hero")
 
         # Next need to encode the current game phase:
         if show_phase:
@@ -2080,7 +2073,7 @@ class Network(nn.Module):
         # Forward pass of the neural network. This produces the main outputs for the network but this is not called directly from main(). Instead, sample_action is called.
         rnn_output, new_rnn_state = self.rnn(x, prev_rnn_state)  # For LSTM, x shape must be: [seq_length, measure_gs(name)]. A bit tricky but addressed below before calling forward.
         x1 = self.dropout1(self.ln_rnn(rnn_output[-1]))  # Apply LayerNorm to LSTM output
-        x2 = self.dropout2(torch.relu(self.ln1(self.fc1(x1))) + x1)  # Feedforward layer for ln1 and fc1, with residual
+        x2 = self.dropout2(F.gelu(self.ln1(self.fc1(x1))) + x1)  # Feedforward layer for ln1 and fc1, with residual
         return self.fc2(x2), new_rnn_state
 
     def reset_memory(self):
@@ -2141,10 +2134,19 @@ class Network(nn.Module):
             x = x.unsqueeze(0)
             # Retreive previous rnn_state
             prev_rnn_state = prev_rnn_state if (prev_rnn_state is not None) else self.memory["rnn_states"][-1]
+            # Adjust for half precision if model was loaded that way (only for forward pass):
+            x_dtype = next(self.parameters()).dtype
+            if x_dtype == torch.float16:
+                x = x.half()
+                mask = mask.half()
+                tempos = tempos.half()
+                prev_rnn_state = prev_rnn_state.half()
             # Do forward pass
             policy_logits, new_rnn_state = self(x, prev_rnn_state)
             # Element-wise vector addition
             masked_logits = policy_logits + mask
+            # Prevent floating point 16 overflow by subtracting max
+            masked_logits = masked_logits - masked_logits.max()
             # Apply softmax to get probabilities; lower temp is less random and chaotic and higher temp is more uniform. High temp is good for early game exploration, low temp is good for late game exploitation.
             probs = F.softmax(masked_logits / (self.temperature + 1e-9), dim=0) 
             # Add a small epsilon to try to avoid floating-point/nan errors
@@ -2196,7 +2198,7 @@ class Network(nn.Module):
 
         return reward_signals
 
-    def train_network(self, train_predictions=False):
+    def train_network(self, train_predictions=False, baseline=1):
         # This is the training loop that is called after the game is over, data has been collected, and there is a winner (or tie)
         # All of the actions that took place are recomputed N times, where N is the number of epochs, if N is greater than 1. If N=1, the data was computed during sample_action.
         # This applies the learning algorithm N times to optimize for the algorithm called 'REINFORCE'
@@ -2236,7 +2238,7 @@ class Network(nn.Module):
                     # Concatenate with tempos and shape for LSTM
                     x = torch.cat((gs_vector, tempos_), dim=0).unsqueeze(0)
                     # Forward using (in-place updating) rnn state and gs_vector for every step
-                    policy_logits_, rnn_state = self(x, rnn_state)
+                    policy_logits_, rnn_state, probs_ = self(x, rnn_state)
                     # Add to vector, shape [self.game_length, num_actions - 1]
                     policy_logits.append(policy_logits_)
                 # Stack logits
@@ -2253,6 +2255,8 @@ class Network(nn.Module):
                 policy_loss = -torch.log(chosen_action_probs) * reward_signals.detach()  # [self.game_length]
                 # Add to total loss
                 total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean()
+                # Apply baseline
+                total_loss = total_loss * baseline
                 # Append to logger
                 losses.append(total_loss.item())
                 # losses.append(self.optimizer.param_groups[0]['lr'])  # Optional to watch learning rates
@@ -2273,7 +2277,8 @@ class Network(nn.Module):
             else:
                 prediction_loss = 0.0
             policy_loss = -logprobs * reward_signals.detach()
-            total_loss = policy_loss.mean() - self.entropy_coef*entropies.mean() + prediction_loss  # Use mean and not sum to avoid favoring short games
+            total_loss = policy_loss.mean() - self.entropy_coef * entropies.mean() + prediction_loss  # Use mean and not sum to avoid favoring short games
+            total_loss = total_loss * baseline  # Changes the speed of learning relative to opponent
             losses.append(total_loss.item())
             # losses.append(self.optimizer.param_groups[0]['lr'])  # To watch learning rates
             self.optimizer.zero_grad()
@@ -2298,10 +2303,20 @@ class Network(nn.Module):
         file_path = os.path.join(directory, f"ai_weights_{name}.pth")
         torch.save(self.state_dict(), file_path)
         print(f"Saved PyTorch model to: {file_path}")
+        # Save float16 version
+        model_half = self.half()
+        small_file_path = os.path.join(directory, f"ai_weights_half_{name}.pth")
+        torch.save(model_half.state_dict(), small_file_path)
+        print(f"Saved half-precision PyTorch model to: {small_file_path}")
 
-    def load(self, name):
-        self.load_state_dict(torch.load(f"ai_weights_{name}.pth", map_location=device))
-        print(f"Loaded PyTorch model from ai_weights_{name}.pth")
+    def load(self, name, half=False):
+        if half:
+            self.half()
+            self.load_state_dict(torch.load(f"ai_weights_half_{name}.pth", map_location=device))
+            print(f"Loaded PyTorch model from ai_weights_half_{name}.pth")
+        else:
+            self.load_state_dict(torch.load(f"ai_weights_{name}.pth", map_location=device))
+            print(f"Loaded PyTorch model from ai_weights_{name}.pth")
 
     def get_state_dict(self):
         # For population-based training
@@ -2332,7 +2347,9 @@ class Main:
         self.hero_training = kwargs["hero_training"]
         self.monster_training = kwargs["monster_training"]
         self.tempo_weight = kwargs["tempo_weight"]
+        self.starting_tempo_weight = kwargs["tempo_weight"]
         # Annealing:
+        self.anneal_tempo_weight = kwargs["anneal_tempo_weight"]
         self.anneal_temperature = kwargs["anneal_temperature"]
         self.anneal_entropy = kwargs["anneal_entropy"]
         # Testing parameters:
@@ -2356,14 +2373,14 @@ class Main:
         self.hero_pool = deque(maxlen=self.pool_size)  # To store a history of hero weights
         self.monster_pool = deque(maxlen=self.pool_size)  # To store a history of monster weights
 
-    def load_ai_weights(self):
+    def load_ai_weights(self, half=False):
         # Load weights into AIs if network architecture matches
         try:
-            self.hero_ai.load("hero")
+            self.hero_ai.load("hero", half)
         except:
             print("No hero_ai to load")
         try:
-            self.monster_ai.load("monster")
+            self.monster_ai.load("monster", half)
         except:
             print("No monster_ai to load")
         print(f"Hero total parameters: {self.hero_ai.num_params}")
@@ -2429,7 +2446,7 @@ class Main:
                             opp_ai.memory["opp_choices"].append(probs)
 
                     # For an enemy AI predicting YOUR actions during YOUR turn:
-                    if gs.opp.player_type == "computer_ai":  # Player without turn priority tries to predict the action probs of the player with turn priority
+                    if gs.me.player_type == "computer_ai" and gs.opp.player_type == "computer_ai":  # Player without turn priority tries to predict the action probs of the player with turn priority
                         if gs.me.name == "hero":
                              _, _, _ = opp_ai.sample_action(gs, training=train_monster, predicting=True)
                         elif gs.me.name == "monster":
@@ -2479,13 +2496,21 @@ class Main:
 
         # After the game, option to train AI on results, and at the same time, get loss data:
         train_predictions = True if gs.hero.player_type == "computer_ai" and gs.monster.player_type == "computer_ai" else False
+        hero_baseline = 1
+        if len(self.hero_game_data) >= 100:
+            hero_wr = mean(self.hero_game_data[-100:])
+            hero_baseline = 1 - hero_wr
+        monster_baseline = 1
+        if len(self.monster_game_data) >= 100:
+            monster_wr = mean(self.monster_game_data[-100:])
+            monster_baseline = 1 - monster_wr  # Baseline pushes AIs towards equal winrates = even training
 
         if gs.hero.player_type == "computer_ai" and train_hero:
             if train_only_on_wins and gs.winner != "hero":
                 self.hero_loss_data.extend([0] * self.hero_ai.epochs)
                 self.hero_ai.reset_memory()
             else:
-                self.hero_loss_data.extend(self.hero_ai.train_network(train_predictions))
+                self.hero_loss_data.extend(self.hero_ai.train_network(train_predictions, hero_baseline))
         else:
             self.hero_loss_data.extend([0] * self.hero_ai.epochs)  # So that the graphs don't break if player isn't an ai
             self.hero_ai.reset_memory()
@@ -2495,7 +2520,7 @@ class Main:
                 self.monster_loss_data.extend([0] * self.monster_ai.epochs)
                 self.monster_ai.reset_memory()
             else:
-                self.monster_loss_data.extend(self.monster_ai.train_network(train_predictions))
+                self.monster_loss_data.extend(self.monster_ai.train_network(train_predictions, monster_baseline))
         else:
             self.monster_loss_data.extend([0] * self.monster_ai.epochs)
             self.monster_ai.reset_memory()
@@ -2608,6 +2633,11 @@ class Main:
             if (i+1) % 100 == 0:
                 print(f" [{i+1}/{best_of}]")
 
+            if self.anneal_tempo_weight:
+                fraction = 1 - (i+1)/best_of
+                current_tempo_weight = fraction * self.starting_tempo_weight
+                self.tempo_weight = current_tempo_weight
+
             if self.anneal_entropy:
                 starting_entropy = self.hyperparameters["entropy_coef"]
                 fraction = 1 - (i+1)/best_of
@@ -2622,7 +2652,8 @@ class Main:
                 self.hero_ai.temperature = current_temp
                 self.monster_ai.temperature = current_temp
 
-        # After training, reset temperature and entropy
+        # Afterwards, reset anneal params to what they were
+        self.tempo_weight = self.starting_tempo_weight
         self.hero_ai.entropy_coef = self.hyperparameters["entropy_coef"]
         self.monster_ai.entropy_coef = self.hyperparameters["entropy_coef"]
         self.hero_ai.temperature = self.hyperparameters["temperature"]
@@ -2782,9 +2813,9 @@ class Main:
 
 hyperparameters = {
     # Network architecture:
-    "rnn_size": 128,
+    "rnn_size": 64,
     "num_rnn_layers": 2,  # Ignore dropout warning if X=1
-    "feedforward_size": 128,
+    "feedforward_size": 64,
     # Reward shaping:
     "long_term_gamma": 0.95,  # Lower values decay the end-of-game reward to earlier turns faster
     "short_term_gamma": 0.7,
@@ -2811,6 +2842,7 @@ game_settings = {
     "monster_training": True,
     "tempo_weight": 1.0,  # Non game-end rewards are multiplied by this value. Set to 0 to train only on game-end rewards (winning and losing).
     # Annealing:
+    "anneal_tempo_weight": False,
     "anneal_temperature": False,
     "anneal_entropy": False,  # Linearly reduce entropy from entropy_coef to 0 over the course of training
     # Pooling parameters:
