@@ -47,52 +47,22 @@
         {% endif %}
         </p>
     </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const bodyElement = document.body;
+        // Extracts the URL from the 'background-image' property
+        const imageUrl = window.getComputedStyle(bodyElement).backgroundImage.slice(5, -2);
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const difficultySelect = document.getElementById('difficulty-select');
-            const heroLink = document.getElementById('play-hero-link');
-            const monsterLink = document.getElementById('play-monster-link');
-
-            function updateLinks() {
-                const difficulty = difficultySelect.value;
-                heroLink.href = `{{ url_for('start_game', role='hero') }}&difficulty=${difficulty}`;
-                monsterLink.href = `{{ url_for('start_game', role='monster') }}&difficulty=${difficulty}`;
-            }
-
-            if (difficultySelect) {
-                difficultySelect.addEventListener('change', updateLinks);
-            }
-        });
-    </script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const difficultySelect = document.getElementById('difficulty-select');
-            const heroLink = document.getElementById('play-hero-link');
-            const monsterLink = document.getElementById('play-monster-link');
-
-            function updateLinks() {
-                const difficulty = difficultySelect.value;
-                heroLink.href = `{{ url_for('start_game', role='hero') }}&difficulty=${difficulty}`;
-                monsterLink.href = `{{ url_for('start_game', role='monster') }}&difficulty=${difficulty}`;
-                // Save the selected difficulty to localStorage
-                localStorage.setItem('pokerMonsterDifficulty', difficulty);
-            }
-
-            // Load the saved difficulty from localStorage
-            const savedDifficulty = localStorage.getItem('pokerMonsterDifficulty');
-            if (savedDifficulty) {
-                difficultySelect.value = savedDifficulty;
-            }
-
-            // Initial call to set the links correctly on page load
-            updateLinks();
-
-            // Add event listener for changes
-            if (difficultySelect) {
-                difficultySelect.addEventListener('change', updateLinks);
-            }
-        });
-    </script>
+        if (imageUrl) {
+            const img = new Image();
+            img.src = imageUrl;
+            img.onerror = function() {
+                console.error('Background image failed to load. Retrying...');
+                // This will redirect to the home page, which will pick a new random background
+                window.location.href = "{{ url_for('choice_screen') }}";
+            };
+        }
+    });
+</script>
 </body>
 </html>
