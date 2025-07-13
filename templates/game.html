@@ -23,7 +23,7 @@
         }
         .game-container {
             display: grid;
-            grid-template-columns: 280px 1fr; /* Fixed sidebar, flexible board */
+            grid-template-columns: 18rem 1fr; /* Fixed sidebar, flexible board */
             height: 100%;
             gap: 0rem;
             padding: 0rem;
@@ -34,19 +34,20 @@
             flex-direction: column; /* To push the footer to the bottom */
             border: 1px solid rgba(0, 0, 0, 0.2);
             padding: 0rem;
-            background-color: rgba(0, 0, 0, 0.4);
+            background-color: rgba(0, 0, 0, 0.7);
             height: 100vh;
+            text-align: center;
         }
         .actions-box {
             border: 2px solid rgba(0, 0, 0, 0.2);
             border-radius: 0px;
-            padding: 0.5rem 1rem;
+            /* padding: 0.5rem 1rem; */
             margin-bottom: 0rem;
         }
         .actions-box h4 {
             margin-top: 0.5rem;
             margin-bottom: 0.0rem;
-            color: rgba(255, 255, 255, 0.8);
+            color: rgba(0, 0, 0, 0.6);
         }
         .actions-box ol {
             padding-left: 1.5rem;
@@ -66,11 +67,14 @@
             width: 100%; padding: 0.5rem; font-size: 1rem; background-color: #4a4a7c;
             color: white; border: none; border-radius: 3px; cursor: pointer; margin-bottom: 5px;
         }
+        .action-form button:hover {
+            background-color: #4f4f83; /* A slightly lighter shade of the original blue */
+        }
         .footer-container {
             position: fixed;
             bottom: 0;
             left: 0;
-            width: 280px; /* This must match the width of your actions column */
+            width: 18rem; /* This must match the width of your actions column */
             box-sizing: border-box; /* Ensures padding is included in the width */
             flex-shrink: 0;
         }
@@ -111,6 +115,7 @@
             padding: 0rem;
             background-color: rgba(0, 0, 0, 0.3);
             border: none; /* Removed border to match wireframe more closely */
+            overflow: hidden;
         }
         .zone {
             border: 1px dashed rgba(255, 255, 255, 0.3);
@@ -344,21 +349,43 @@
             display: none; /* Hidden by default */
             position: fixed; /* Positions relative to the viewport, ignoring scroll */
             z-index: 2000; /* Ensures it's on top of everything */
-            width: 280px;  /* Set a fixed width for the popup */
+            width: 40vh;  /* Set a fixed width for the popup */
             pointer-events: none; /* CRITICAL: Lets mouse events pass through to elements underneath */
             border-radius: 15px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.7);
         }
-
         #card-image-viewer img {
             width: 100%;
             border-radius: 15px; /* Match the container's rounding */
+        }
+        .power-display {
+            padding: 0rem;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+        }
+
+        .power-display h4 {
+            margin: 0 0 0rem 0; /* Adjust spacing */
+            font-weight: normal;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .power-display .power-value {
+            font-size: 1rem;
+            font-weight: bold;
+            color: #ffc107; /* A gold color for emphasis */
+            line-height: 1;
         }
     </style>
 </head>
 <body>
     <div class="game-container">
         <div class="actions-column">
+            <div class="power-display">
+                <span class="power-value">Power: {{ info.me.power }}</span>
+            </div>
             <div class="actions-box opponent-actions">
                 <h3>Enemy Actions</h3>
                 <div class="log-content">
@@ -366,7 +393,7 @@
                 </div>
             </div>
             <div class="actions-box my-actions">
-                <h3>My Available Actions</h3>
+                <h3>My Actions</h3>
                 <div class="action-list">
                     {% for action in actions %}<form action="{{ url_for('submit_action') }}" method="post" class="action-form"><input type="hidden" name="action_id" value="{{ action.id }}"><button type="submit">{{ action.name }}</button></form>{% endfor %}
                 </div>
@@ -376,9 +403,6 @@
                 <a href="{{ url_for('choice_screen') }}" class="restart-button">Restart Game</a>
             </div>
         </div>
-
-
-
 
 
         
