@@ -9,8 +9,7 @@
         body { font-family: sans-serif; text-align: center; padding-top: 50px; 
                 background-image: url("{{ url_for('static', filename='backgrounds/' + background_image) }}");
                 background-size: cover;
-                background-repeat: no-repeat;
-                background-attachment: fixed; }
+                background-repeat: no-repeat; }
         .container { max-width: 800px; margin: auto; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: left;}
         a { color: #007bff; }
     </style>
@@ -33,7 +32,7 @@
 
             <h4>Object/ways to win: Each player starts with 15 health, and a 20-card deck. The first player to run out of health or cards in their deck loses the game.</p>
             To start the game: Each player chooses the deck they want to play (red = Monster, green = Hero). Flip a coin to see who goes first. Both players shuffle their decks and draw 4 cards. Finally, the person going first starts.</p>
-            Turn order: This is a turn-based game, and each turn has the same pattern. At the start of the turn, the player whose turn it is draws a card. Then, if they have any power cards, then they gain 1 power for each one they have (this is skipped on turn 1). From there, they can play the cards in their hand using the set of rules explained on the other side of this card. At the end of the turn, the player whose turn it is passes their turn to their opponent; and they start theirs. This pattern repeats until somebody wins the game.</p>
+            Turn order: This is a turn-based game, and each turn has the same pattern. At the start of the turn, the player whose turn it is draws a card. Then, if they have any power cards, then they gain 1 power for each one they have (this is skipped on turn 1). From there, they can play the cards in their hand using the set of rules explained below. At the end of the turn, the player whose turn it is passes their turn to their opponent; and they start theirs. This pattern repeats until somebody wins the game.</p>
             Note: The player going first doesn't draw a card on their initial turn.</p>
             Card rules: Any card can be played face-up or face-down. Face-down cards are known as power cards, and these give the power needed to play cards face-up. In this way, every card has a dual usage. To play a power card, simply take any card from your hand and place it onto the board face-down. When you do this, you have made a power card. Face-up cards are different. While power cards are hidden from your opponent, face-up cards are revealed as you play them. To do this requires power, which is explained below. To play a card from your hand in the face-up configuration, simply pay its power cost, then follow its text. Each card basically does what it says, except short cards are discarded after use, while long cards remain on the board until killed (their health is at the bottom), and then are discarded.</p>
             You can (and should, in the early turns of the game) play 1 power card per turn, but it's not required. You can play any number of face-up cards you have power for.</p>
