@@ -103,17 +103,17 @@ def get_display_info(gs):
     # Peek top2 reveal
     elif gs.game_phase == PHASE_CHOOSING_FROM_DECK_TOP2:
         top2 = gs.me.deck[:2]
-        info["special_info"] = f"My deck top 2 cards: {[card.name for card in top2]}"
+        info["special_info"] = f"Your deck top 2 cards: {[card.name for card in top2]}"
     # Ultimatum deck reveal
     elif gs.game_phase == PHASE_CHOOSING_ULTIMATUM_CARD:
-        info["special_info"] = f"My deck: {[card.name for card in gs.me.deck]}"
+        info["special_info"] = f"Your deck: {[card.name for card in gs.me.deck]}"
     # Ultimatum ultimatum
     elif gs.game_phase == PHASE_OPP_CHOOSING_FROM_ULTIMATUM:
         info["special_info"] = f"Opp Ultimatum: {[card.name for card in gs.cache[1:3]]}"
     # Reconsider reveal
     elif gs.game_phase == PHASE_REORDERING_DECK_TOP3:
         top3 = gs.me.deck[:3]
-        info["special_info"] = f"My deck top 3 cards: {[card.name for card in top3]}"
+        info["special_info"] = f"Your deck top 3 cards: {[card.name for card in top3]}"
     # Viewing card info
     elif gs.game_phase == PHASE_VIEWING_CARD_INFO:
         info["special_info"] = f"{gs.cache[0].name}: {gs.cache[0].card_text} (Power Cost: {gs.cache[0].power_cost})"
@@ -255,7 +255,7 @@ def start_game():
 def game():
     if "gs" not in session:
         return redirect(url_for("choice_screen"))
-        
+
     gs = GameState.from_dict(session["gs"])
 
     if gs.winner:

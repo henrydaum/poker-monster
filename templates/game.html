@@ -60,11 +60,11 @@
             flex: 1; }
         .action-form button {
             width: 100%; padding: 0.5rem; font-size: 1rem; background-color: #5a5abf;
-            color: white; border: none; border-radius: 0px; cursor: pointer; margin-bottom: 5px;
+            color: white; border: 3px solid #313184; border-radius: 0px; cursor: pointer; margin-bottom: 5px;
             text-align: left;
         }
         .action-form button:hover {
-            background-color: #4f4f83; /* A slightly lighter shade of the original blue */
+            background-color: rgb(139, 139, 227); /* A slightly lighter shade of the original blue */
         }
         .footer-container {
             position: fixed;
@@ -76,7 +76,7 @@
         }
         .footer-bar {
             background-color: #1a1a1a;
-            padding: 0.5rem 1rem;
+            padding: 0.5rem;
             border-radius: 0px;
             text-align: center;
             margin-bottom: 0rem;
@@ -536,6 +536,15 @@
                 rotate(var(--rotation));
             }
         }
+        .special-info-box {
+            background-color: #3196b8; /* A different shade of blue/purple */
+            color: #1a1a1a;
+            padding: 0.3rem;
+            text-align: center;
+            font-size: 0.9rem;
+            border-right: 5px solid #12303a;
+            border-left: 5px solid #12303a;
+        }
     </style>
 </head>
 <body>
@@ -557,6 +566,11 @@
                 </div>
             </div>
             <div class="footer-container">
+                {% if info.special_info %}
+                <div class="special-info-box">
+                    {{ info.special_info }}
+                </div>
+                {% endif %}
                 <div class="footer-bar"><h2>{{ info.turn_priority.upper() }} - Turn {{ info.turn_number }}</h2>
                     <div>{{ info.game_phase }}</div>
 
