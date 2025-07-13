@@ -19,7 +19,7 @@
             background-repeat: no-repeat;
             margin: 0;
             overflow: hidden;
-            height: 100vh;
+            height: 100svh;
         }
         .game-container {
             display: grid;
@@ -35,7 +35,7 @@
             border: 1px solid rgba(0, 0, 0, 0.2);
             padding: 0rem;
             background-color: rgb(60,60,148);
-            height: 100vh;
+            height: 100svh;
             text-align: center;
         }
         .actions-box {
@@ -108,10 +108,10 @@
             aspect-ratio: 2.5 / 3.5; /* width / height */
         }
         .board {
-            --card-width: calc(38vh * (2.5 / 3.5));
+            --card-width: calc(38svh * (2.5 / 3.5));
             display: grid;
-            grid-template-rows: 12vh 38vh 38vh 12vh;
-            gap: 0rem;
+            grid-template-rows: 10.5svh 38svh 38svh 10.5svh;
+            gap: 1svh;
             padding: 0rem;
             background-color: rgba(0, 0, 0, 0.3);
             border: none; /* Removed border to match wireframe more closely */
@@ -119,7 +119,7 @@
         }
         .zone {
             border: 1px dashed rgba(255, 255, 255, 0.3);
-            border-radius: 0px;
+            border-radius: 15px;
             padding: 0.5rem;
             position: relative;
         }
@@ -135,7 +135,7 @@
             overflow-x: auto;       /* Apply the horizontal scrollbar here */
             align-items: stretch;   /* Make all zones equal height */
             grid-template-columns: var(--card-width) calc(var(--card-width) * 1.7) 1fr;
-            gap: 1rem;
+            gap: 3svh;
             padding: 0;
             border: none;
             overflow-x: auto;      /* This enables horizontal scrolling */
@@ -146,7 +146,7 @@
             overflow-x: auto;       /* Apply the horizontal scrollbar here */
             align-items: stretch;   /* Make all zones equal height */
             grid-template-columns: 1fr calc(var(--card-width) * 1.7) var(--card-width);
-            gap: 1rem;
+            gap: 3svh;
             padding: 0;
             border: none;
             overflow-x: auto;      /* This enables horizontal scrolling */
@@ -166,7 +166,7 @@
             top: 0;
             left: 0;
             width: var(--card-width);
-            height: 38vh; /* Changed from 38vh to be relative to the container's padding */
+            height: 38svh; /* Changed from 38svh to be relative to the container's padding */
             border-radius: 15px;
             /* object-fit: fill; */
             transition: transform 0.3s ease;
@@ -299,7 +299,7 @@
             gap: 15px; /* Space between cards */
             justify-content: center;
             padding-top: 1rem;
-            max-height: 70vh; /* Give the card area a max height */
+            max-height: 70svh; /* Give the card area a max height */
             overflow-y: auto; /* And make IT scrollable */
         }
         /* Individual cards in the modal */
@@ -337,8 +337,8 @@
             display: none; /* Hidden by default */
             position: fixed; /* Positions relative to the viewport, ignoring scroll */
             z-index: 2000; /* Ensures it's on top of everything */
-            width: 40vh;  /* Set a fixed width for the popup */
-            height: calc(40vh * (3.5 / 2.5)); /* ADD THIS LINE */
+            width: 40svh;  /* Set a fixed width for the popup */
+            height: calc(40svh * (3.5 / 2.5)); /* ADD THIS LINE */
             pointer-events: none; /* CRITICAL: Lets mouse events pass through to elements underneath */
             border-radius: 15px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.7);
@@ -400,7 +400,7 @@
                 /* Take the sidebar out of the normal layout flow */
                 position: fixed; 
                 width: 18rem; /* Keep its original width */
-                height: 100vh;
+                height: 100svh;
                 z-index: 1000;
                 /* Start with the sidebar hidden off-screen to the left */
                 transform: translateX(-100%); 
@@ -432,35 +432,42 @@
             position: absolute;
             bottom: 0;          /* Anchor to the bottom for your hand */
             left: 50%;          /* Move the left edge to the horizontal center */
+            z-index: 12; /* ADD THIS LINE */
             
             /* This pulls the card back by half its own width, truly centering it. CRITICAL! */
             /* --- ADD THIS LOGIC --- */
             --center-offset: calc((var(--i) - (var(--n) - 1) / 2));
-            --rotation: calc(var(--center-offset) * 5deg);    /* 5deg of rotation per card */
+            --rotation: calc(var(--center-offset) * 10deg);    /* 5deg of rotation per card */
             --x-translation: calc(var(--center-offset) * 30%); /* 30% horizontal spread per card */
-            --y-translation: calc(abs(var(--center-offset)) * 8px); /* 8px lift for cards on the edge */
+            --y-translation: calc(abs(var(--center-offset)) * 10px); /* 8px lift for cards on the edge */
 
             transform: translateX(-50%)
-                    translateX(var(--x-translation)) 
-                    translateY(var(--y-translation)) 
-                    rotate(var(--rotation));
+                translateY(-25%)
+                translateX(var(--x-translation)) 
+                translateY(var(--y-translation)) 
+                rotate(var(--rotation));
             
             /* Set the pivot point for rotation to the bottom center of the card */
             transform-origin: bottom center; 
         }
         .opponent-hand-zone .hand-card {
-            bottom: auto; /* Unset the original 'bottom' anchor */
-            top: 0;       /* Anchor the cards to the top of the zone */
+            --center-offset: calc((var(--i) - (var(--n) - 1) / 2));
+            --rotation: calc(var(--center-offset) * 10deg);    /* 5deg of rotation per card */
+            --x-translation: calc(var(--center-offset) * -30%); /* 30% horizontal spread per card */
+            --y-translation: calc(abs(var(--center-offset)) * -10px); /* 8px lift for cards on the edge */
+
+            transform: translateX(-50%)
+                translateY(-55%)
+                translateX(var(--x-translation)) 
+                translateY(var(--y-translation)) 
+                rotate(var(--rotation));
             
             /* Set the pivot point to the top center of the card */
             transform-origin: top center; 
-
-            /* Override the y-translation to be positive, pushing the outer cards down */
-            --y-translation: calc(abs(var(--center-offset)) * 8px);
         }
-        .opponent-hand-zone .hand-container {
+        /* .opponent-hand-zone .hand-container {
             transform: rotate(180deg);
-        }
+        } */
     </style>
 </head>
 <body>
@@ -563,7 +570,7 @@
             </div>
 
             <div class="zone">
-                <span class="zone-label">My Hand ({{ info.me.hand|length }})</span>
+                <span class="zone-label">Hand ({{ info.me.hand|length }})</span>
                 <div class="hand-container">
                     {% for card in info.me.hand %}
                         <img src="{{ url_for('static', filename=card.image_filename) }}"
