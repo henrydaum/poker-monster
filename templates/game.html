@@ -34,7 +34,7 @@
             flex-direction: column; /* To push the footer to the bottom */
             border: 1px solid rgba(0, 0, 0, 0.2);
             padding: 0rem;
-            background-color: rgb(60,60,148);
+            background-color: rgb(27, 27, 27);
             height: 100svh;
             text-align: center;
         }
@@ -110,9 +110,9 @@
         .board {
             --card-width: calc(38svh * (2.5 / 3.5));
             display: grid;
-            grid-template-rows: 10.5svh 38svh 38svh 10.5svh;
-            gap: 1svh;
-            padding: 0rem;
+            grid-template-rows: 7.5svh 38svh 38svh 7.5svh;
+            gap: 3svh;
+            padding: 0 1svh;
             background-color: rgba(0, 0, 0, 0.3);
             border: none; /* Removed border to match wireframe more closely */
             overflow: hidden;
@@ -125,8 +125,9 @@
         }
         .zone-label {
             position: absolute;
-            top: 0.5rem;
-            left: 0.5rem;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); /* Centers on both axes */
             font-weight: bold;
             color: rgba(255, 255, 255, 0.7);
         }
@@ -139,7 +140,7 @@
             padding: 0;
             border: none;
             overflow-x: auto;      /* This enables horizontal scrolling */
-            overflow-y: hidden;    /* This will hide the unwanted vertical scrollbar */
+            /* overflow-y: hidden;    This will hide the unwanted vertical scrollbar */
         }
         .opp-mid-zone {
             display: flex;          /* Use flexbox to line up the zones */
@@ -227,6 +228,7 @@
             z-index: 10;
             display: flex;
             flex-direction: column; /* Stacks health display on top of button */
+            z-index: 14; /* ADD THIS LINE */
         }
         /* The new health display box */
         .health-display {
@@ -316,7 +318,6 @@
             flex-grow: 1;
             min-width: var(--card-width); 
         }
-
         .battlefield-card {
             /* Set the size of the cards */
             height: 100%; /* Make cards almost as tall as the zone */
@@ -356,18 +357,21 @@
             border-bottom: 1px solid rgba(0, 0, 0, 0.2);
         }
 
-        .power-display h4 {
-            margin: 0 0 0rem 0; /* Adjust spacing */
-            font-weight: normal;
-            font-size: 1rem;
-            color: rgba(255, 255, 255, 0.7);
+        .power-display {
+            background-color: rgba(20, 20, 20, 0.7);
+            font-size: 1.1rem;
+            font-weight: bold;
+            padding: 0.2rem 0.5rem;
+            text-align: center;
+            border: 1px solid #888;
+            border-bottom: none; /* Merges with the health display below */
         }
 
         .power-display .power-value {
-            font-size: 1rem;
+            font-size: 1.1rem; /* Changed from 1rem */
             font-weight: bold;
-            color: #ffc107; /* A gold color for emphasis */
-            line-height: 1;
+            color: #ffc107; /* Keeps the gold color */
+            line-height: 1.2; /* Adjusted for better spacing */
         }
         #sidebar-toggle-btn {
             display: none; /* Hidden by default on large screens */
@@ -437,7 +441,7 @@
             /* This pulls the card back by half its own width, truly centering it. CRITICAL! */
             /* --- ADD THIS LOGIC --- */
             --center-offset: calc((var(--i) - (var(--n) - 1) / 2));
-            --rotation: calc(var(--center-offset) * 10deg);    /* 5deg of rotation per card */
+            --rotation: calc(var(--center-offset) * 10deg);    /* 10deg of rotation per card */
             --x-translation: calc(var(--center-offset) * 30%); /* 30% horizontal spread per card */
             --y-translation: calc(abs(var(--center-offset)) * 10px); /* 8px lift for cards on the edge */
 
@@ -452,8 +456,8 @@
         }
         .opponent-hand-zone .hand-card {
             --center-offset: calc((var(--i) - (var(--n) - 1) / 2));
-            --rotation: calc(var(--center-offset) * 10deg);    /* 5deg of rotation per card */
-            --x-translation: calc(var(--center-offset) * -30%); /* 30% horizontal spread per card */
+            --rotation: calc(var(--center-offset) * 10deg);    /* 10deg of rotation per card */
+            --x-translation: calc(var(--center-offset) * -30%); /* -30% horizontal spread per card */
             --y-translation: calc(abs(var(--center-offset)) * -10px); /* 8px lift for cards on the edge */
 
             transform: translateX(-50%)
@@ -465,9 +469,10 @@
             /* Set the pivot point to the top center of the card */
             transform-origin: top center; 
         }
-        /* .opponent-hand-zone .hand-container {
-            transform: rotate(180deg);
-        } */
+        .opponent-hand-zone .corner-hud {
+            bottom: auto; /* Unset the default bottom anchor */
+            top: 0.5rem;  /* Anchor it to the top instead */
+        }
     </style>
 </head>
 <body>
@@ -475,9 +480,6 @@
 
     <div class="game-container">
         <div class="actions-column">
-            <div class="power-display">
-                <span class="power-value">Power: {{ info.me.power }}</span>
-            </div>
             <div class="actions-box opponent-actions">
                 <h3>Enemy Actions</h3>
                 <div class="log-content">
@@ -491,7 +493,18 @@
                 </div>
             </div>
             <div class="footer-container">
-                <div class="footer-bar"><h2>{{ info.turn_priority.upper() }} - Turn {{ info.turn_number }}</h2><div>{{ info.game_phase }}</div></div>
+                <div class="footer-bar"><h2>{{ info.turn_priority.upper() }} - Turn {{ info.turn_number }}</h2>
+                    <div>{{ info.game_phase }}</div>
+                    <div class="cache-display" style="font-size: 0.7rem; color: #00fff2; margin-top: 2px;">
+                        {% if info.cache %}
+                            <strong>Cache:</strong> [
+                            {% for card in info.cache %}
+                                {{ card.name }}{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                            ]
+                        {% endif %}
+                    </div>
+                </div>
                 <a href="{{ url_for('choice_screen') }}" class="restart-button">Restart Game</a>
             </div>
         </div>
@@ -580,6 +593,9 @@
                     {% endfor %}
                 </div>
                 <div class="corner-hud">
+                    <div class="power-display">
+                        <span class="power-value">Power: {{ info.me.power }}</span>
+                    </div>
                     <div class="health-display">HP: {{ info.me.health }}</div>
                     <button class="graveyard-btn" id="my-graveyard-btn">My Graveyard</button>
                 </div>
