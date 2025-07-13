@@ -30,28 +30,21 @@
             box-sizing: border-box;
         }
         .actions-column {
+            position: relative; /* ADD THIS LINE */
             display: flex;
             flex-direction: column; /* To push the footer to the bottom */
-            border: 1px solid rgba(0, 0, 0, 0.2);
+            border: 0px solid rgba(0, 0, 0, 0.2);
             padding: 0rem;
             background-color: rgb(33, 33, 33);
             height: 100svh;
             text-align: center;
+            border: 5px solid #1a1a1a; /* ADD THIS LINE */
         }
         .actions-box {
-            border: 2px solid rgba(0, 0, 0, 0.2);
+            border: 0px solid rgba(0, 0, 0, 0.2);
             border-radius: 0px;
             /* padding: 0.5rem 1rem; */
             margin-bottom: 0rem;
-        }
-        .actions-box h4 {
-            margin-top: 0.5rem;
-            margin-bottom: 0.0rem;
-            color: rgba(0, 0, 0, 0.6);
-        }
-        .actions-box ol {
-            padding-left: 1.5rem;
-            margin: 0 0 0.5rem 0;
         }
         .my-actions { 
             flex: 1;                /* CRITICAL: This makes it take all available free space */
@@ -62,10 +55,13 @@
         }
         .action-list, .log-content { 
             flex: 1;
-            overflow-y: auto !important; /* Add !important to force the scrollbar */; flex: 1; }
+            overflow-y: auto !important; /* Add !important to force the scrollbar */; 
+            padding: 0 0.5rem; /* ADD THIS LINE */
+            flex: 1; }
         .action-form button {
             width: 100%; padding: 0.5rem; font-size: 1rem; background-color: #5a5abf;
-            color: white; border: none; border-radius: 3px; cursor: pointer; margin-bottom: 5px;
+            color: white; border: none; border-radius: 0px; cursor: pointer; margin-bottom: 5px;
+            text-align: left;
         }
         .action-form button:hover {
             background-color: #4f4f83; /* A slightly lighter shade of the original blue */
@@ -124,12 +120,49 @@
             position: relative;
         }
         .zone-label {
+            display: none; /* Hidden by default */
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%); /* Centers on both axes */
+            transform: translate(-50%, -50%);
+            
+            /* Make the label highly visible */
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
             font-weight: bold;
-            color: rgba(255, 255, 255, 0.7);
+            text-align: center;
+            white-space: nowrap; /* Prevents text from wrapping */
+            
+            /* Set a high z-index to appear on top of cards */
+            z-index: 15;
+        }
+        body.zone-labels-visible .zone-label {
+            display: block;
+        }
+        /* Style for the new toggle button */
+        #zone-toggle-btn {
+            position: fixed;
+            top: 10svh; /* Positions it below the top HUD */
+            right: 1svh;
+            z-index: 950; /* Places it above the overlay but below modals */
+
+            /* Visual styling */
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #fff;
+            background-color: #555;
+            border: 1px solid #555;
+            border-radius: 50%;
+            width: 35px;
+            height: 35px;
+            cursor: pointer;
+        }
+
+        #zone-toggle-btn:hover {
+            background-color: #ffc107;
+            border: 1px solid #ffc107;
         }
         .player-mid-zone {
             display: flex;          /* Use flexbox to line up the zones */
@@ -224,9 +257,8 @@
 
         .corner-hud {
             position: absolute;
-            bottom: 0.5rem;
-            right: 0.5rem;
-            z-index: 10;
+            bottom: 1svh;
+            right: 0rem;
             display: flex;
             flex-direction: column; /* Stacks health display on top of button */
             z-index: 14; /* ADD THIS LINE */
@@ -277,6 +309,7 @@
             max-width: 1200px;
             position: relative;
             border-radius: 3px;
+            text-align: center;
         }
 
         /* The Close Button (X) */
@@ -389,18 +422,80 @@
             cursor: pointer;
             font-size: 1.8rem;
         }
+        .hand-container {
+            /* This container will fill the zone and act as a reference for positioning the cards */
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        .hand-card {
+        /* This makes all cards stack on top of each other in the center of the container */
+        position: absolute;
+        bottom: 0;          /* Anchor to the bottom for your hand */
+        left: 50%;          /* Move the left edge to the horizontal center */
+        z-index: 12; /* ADD THIS LINE */
+        
+        /* This pulls the card back by half its own width, truly centering it. CRITICAL! */
+        /* --- ADD THIS LOGIC --- */
+        --center-offset: calc((var(--i) - (var(--n) - 1) / 2));
+        --rotation: calc(var(--center-offset) * 10deg);    /* 10deg of rotation per card */
+        --x-translation: calc(var(--center-offset) * 30%); /* 30% horizontal spread per card */
+        --y-translation: calc(abs(var(--center-offset)) * 10px); /* 8px lift for cards on the edge */
 
+        transform: translateX(-50%)
+            translateY(-30%)
+            translateX(var(--x-translation)) 
+            translateY(var(--y-translation)) 
+            rotate(var(--rotation));
+            
+            /* Set the pivot point for rotation to the bottom center of the card */
+            transform-origin: bottom center; 
+        }
+        .opponent-hand-zone .hand-card {
+            --center-offset: calc((var(--i) - (var(--n) - 1) / 2));
+            --rotation: calc(var(--center-offset) * 10deg);    /* 10deg of rotation per card */
+            --x-translation: calc(var(--center-offset) * -30%); /* -30% horizontal spread per card */
+            --y-translation: calc(abs(var(--center-offset)) * -10px); /* 8px lift for cards on the edge */
+            
+            transform: translateX(-50%)
+            translateY(-60%)
+            translateX(var(--x-translation)) 
+            translateY(var(--y-translation)) 
+            rotate(var(--rotation));
+            
+            /* Set the pivot point to the top center of the card */
+            transform-origin: top center; 
+        }
+        
+        .opponent-hand-zone .corner-hud {
+            bottom: auto; /* Unset the default bottom anchor */
+            top: 1svh;  /* Anchor it to the top instead */
+        }
+        .player-hand-zone,
+        .opponent-hand-zone {
+            border: none;
+        }
+        .opponent-hand-zone .graveyard-btn {
+            border-bottom: none;
+        }
+        
+        .opponent-hand-zone .health-display {
+            border-bottom: 1px solid #888;
+        }
         /* Media query for mobile devices */
         @media (max-width: 800px) {
             #sidebar-toggle-btn {
                 display: block; /* Show the button on mobile */
             }
-
+            #sidebar-toggle-btn {
+                display: block; /* Show the button on mobile */
+            }
+        
             .game-container {
                 /* The board will now take up the full screen width */
                 grid-template-columns: 1fr;
             }
-
+        
             .actions-column {
                 /* Take the sidebar out of the normal layout flow */
                 position: fixed; 
@@ -415,84 +510,48 @@
                 transform: translateX(0);
                 box-shadow: 5px 0px 15px rgba(0,0,0,0.5);
             }
-
+        
             /* When the sidebar is open, hide the toggle button */
             body.sidebar-is-open #sidebar-toggle-btn {
                 display: none;
             }
-
+        
             .footer-container {
                 width: 100%; /* Ensure footer is full-width of the sidebar */
             }
-        }
-        .hand-container {
-            /* This container will fill the zone and act as a reference for positioning the cards */
-            width: 100%;
-            height: 100%;
-            position: relative;
-        }
-
-        .hand-card {
-            /* This makes all cards stack on top of each other in the center of the container */
-            position: absolute;
-            bottom: 0;          /* Anchor to the bottom for your hand */
-            left: 50%;          /* Move the left edge to the horizontal center */
-            z-index: 12; /* ADD THIS LINE */
-            
-            /* This pulls the card back by half its own width, truly centering it. CRITICAL! */
-            /* --- ADD THIS LOGIC --- */
-            --center-offset: calc((var(--i) - (var(--n) - 1) / 2));
-            --rotation: calc(var(--center-offset) * 10deg);    /* 10deg of rotation per card */
-            --x-translation: calc(var(--center-offset) * 30%); /* 30% horizontal spread per card */
-            --y-translation: calc(abs(var(--center-offset)) * 10px); /* 8px lift for cards on the edge */
-
-            transform: translateX(-50%)
-                translateY(-25%)
+            .hand-card {
+                --x-translation: calc(var(--center-offset) * 15%); /* Reduced from 30% */
+                transform: translateX(-50%)
+                translateY(-35%)
                 translateX(var(--x-translation)) 
                 translateY(var(--y-translation)) 
                 rotate(var(--rotation));
-            
-            /* Set the pivot point for rotation to the bottom center of the card */
-            transform-origin: bottom center; 
-        }
-        .opponent-hand-zone .hand-card {
-            --center-offset: calc((var(--i) - (var(--n) - 1) / 2));
-            --rotation: calc(var(--center-offset) * 10deg);    /* 10deg of rotation per card */
-            --x-translation: calc(var(--center-offset) * -30%); /* -30% horizontal spread per card */
-            --y-translation: calc(abs(var(--center-offset)) * -10px); /* 8px lift for cards on the edge */
-
-            transform: translateX(-50%)
-                translateY(-55%)
+            }
+            .opponent-hand-zone .hand-card {
+                --x-translation: calc(var(--center-offset) * -15%); /* Reduced from -30% */
+                transform: translateX(-50%)
+                translateY(-65%)
                 translateX(var(--x-translation)) 
                 translateY(var(--y-translation)) 
                 rotate(var(--rotation));
-            
-            /* Set the pivot point to the top center of the card */
-            transform-origin: top center; 
-        }
-        .opponent-hand-zone .corner-hud {
-            bottom: auto; /* Unset the default bottom anchor */
-            top: 0.5rem;  /* Anchor it to the top instead */
-        }
-        .player-hand-zone,
-        .opponent-hand-zone {
-            border: none;
+            }
         }
     </style>
 </head>
 <body>
     <button id="sidebar-toggle-btn">☰</button>
+    <button id="zone-toggle-btn">?</button>
 
     <div class="game-container">
         <div class="actions-column">
             <div class="actions-box opponent-actions">
                 <h3>Enemy Actions</h3>
                 <div class="log-content">
-                    {% for log_entry in info.opp.last_turn_log %}<div class="log-item">{{ loop.index }}. {{ log_entry }}</div>{% else %}<p>No actions taken yet.</p>{% endfor %}
+                    {% for log_entry in info.opp.last_turn_log %}<div class="log-item">{{ loop.index }}. {{ log_entry }}</div>{% else %}<p>No enemy actions.</p>{% endfor %}
                 </div>
             </div>
             <div class="actions-box my-actions">
-                <h3>My Actions</h3>
+                <h3>Your Available Actions</h3>
                 <div class="action-list">
                     {% for action in actions %}<form action="{{ url_for('submit_action') }}" method="post" class="action-form"><input type="hidden" name="action_id" value="{{ action.id }}"><button type="submit">{{ action.name }}</button></form>{% endfor %}
                 </div>
@@ -500,6 +559,7 @@
             <div class="footer-container">
                 <div class="footer-bar"><h2>{{ info.turn_priority.upper() }} - Turn {{ info.turn_number }}</h2>
                     <div>{{ info.game_phase }}</div>
+
                     <div class="cache-display" style="font-size: 0.7rem; color: #00fff2; margin-top: 2px;">
                         {% if info.cache %}
                             <strong>Cache:</strong> [
@@ -518,7 +578,7 @@
         
         <div class="board">
             <div class="zone opponent-hand-zone">
-                <span class="zone-label">Opponent Hand ({{ info.opp.hand_size }})</span>
+                <span class="zone-label">Opp Hand</span>
                 <div class="hand-container">
                     {% for i in range(info.opp.hand_size) %}
                         <img src="{{ url_for('static', filename='images/' + info.opp.name.capitalize() + '.png') }}"
@@ -527,14 +587,14 @@
                     {% endfor %}
                 </div>
                 <div class="corner-hud">
-                    <div class="health-display">HP: {{ info.opp.health }}</div>
                     <button class="graveyard-btn" id="opp-graveyard-btn">Opp Graveyard</button>
+                    <div class="health-display">HP: {{ info.opp.health }}</div>
                 </div>
             </div>
 
             <div class="opp-mid-zone">
                 <div class="zone battlefield-container">
-                    <span class="zone-label">Opponent Battlefield</span>
+                    <span class="zone-label">Opp Battlefield</span>
                     {% for card in info.opp.battlefield %}
                         <img src="{{ url_for('static', filename=card.image_filename) }}" class="card-img battlefield-card">
                     {% endfor %}
@@ -542,7 +602,7 @@
 
                 <div class="zone power-card-container" 
                     style="--card-count: {{ info.opp.power_cards_size }};">
-                    <span class="zone-label">Opponent Power Cards ({{ info.opp.power_cards_size }})</span>
+                    <span class="zone-label">Opp Power Cards</span>
                     {% for i in range(info.opp.power_cards_size) %}
                     <img src="{{ url_for('static', filename='images/' + info.opp.name.capitalize() + '.png') }}"
                         class="card-img"
@@ -551,7 +611,7 @@
                 </div>
 
                 <div class="zone deck-zone">
-                    <span class="zone-label"></span>
+                    <span class="zone-label">Opp Deck<br>+<br>Cards Remaining</span>
                     <img src="{{ url_for('static', filename='images/' + info.opp.name.capitalize() + '.png') }}"
                         alt="Opponent's Deck"
                         class="card-img">
@@ -561,7 +621,7 @@
 
             <div class="player-mid-zone">
                 <div class="zone deck-zone">
-                    <span class="zone-label"></span>
+                    <span class="zone-label">Your Deck<br>+<br>Cards Remaining</span>
                     <img src="{{ url_for('static', filename='images/' + info.me.name.capitalize() + '.png') }}" 
                         alt="Player's Deck"
                         class="card-img">
@@ -570,7 +630,7 @@
 
                 <div class="zone power-card-container" 
                     style="--card-count: {{ info.me.power_cards|length }};">
-                    <span class="zone-label">Power Cards ({{ info.me.power_cards|length }})</span>
+                    <span class="zone-label">Your Power Cards</span>
                     {% for card in info.me.power_cards %}
                     <img src="{{ url_for('static', filename='images/' + info.me.name.capitalize() + '.png') }}" 
                         class="card-img" 
@@ -580,7 +640,7 @@
                 </div>
 
                 <div class="zone battlefield-container">
-                    <span class="zone-label">Battlefield</span>
+                    <span class="zone-label">Your Battlefield</span>
                     {% for card in info.me.battlefield %}
                         <img src="{{ url_for('static', filename=card.image_filename) }}" class="card-img battlefield-card">
                     {% endfor %}
@@ -588,7 +648,7 @@
             </div>
 
             <div class="zone player-hand-zone">
-                <span class="zone-label">Hand ({{ info.me.hand|length }})</span>
+                <span class="zone-label">Your Hand</span>
                 <div class="hand-container">
                     {% for card in info.me.hand %}
                         <img src="{{ url_for('static', filename=card.image_filename) }}"
@@ -703,7 +763,16 @@
                 closeModal();
             }
         });
+
+        // --- Zone Label Toggle ---
+        const zoneToggleBtn = document.getElementById('zone-toggle-btn');
+        if (zoneToggleBtn) {
+            zoneToggleBtn.addEventListener('click', () => {
+                document.body.classList.toggle('zone-labels-visible');
+            });
+        }
     });
+
     function initializeCardViewer() {
         const cardElements = document.querySelectorAll('[data-image]');
         const viewer = document.getElementById('card-image-viewer');

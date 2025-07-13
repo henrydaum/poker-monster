@@ -253,6 +253,9 @@ def start_game():
 
 @app.route("/game")
 def game():
+    if "gs" not in session:
+        return redirect(url_for("choice_screen"))
+        
     gs = GameState.from_dict(session["gs"])
 
     if gs.winner:
