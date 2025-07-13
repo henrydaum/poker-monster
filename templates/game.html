@@ -34,7 +34,7 @@
             flex-direction: column; /* To push the footer to the bottom */
             border: 1px solid rgba(0, 0, 0, 0.2);
             padding: 0rem;
-            background-color: rgba(0, 0, 0, 0.7);
+            background-color: rgb(60,60,148);
             height: 100vh;
             text-align: center;
         }
@@ -64,7 +64,7 @@
             flex: 1;
             overflow-y: auto !important; /* Add !important to force the scrollbar */; flex: 1; }
         .action-form button {
-            width: 100%; padding: 0.5rem; font-size: 1rem; background-color: #4a4a7c;
+            width: 100%; padding: 0.5rem; font-size: 1rem; background-color: #5a5abf;
             color: white; border: none; border-radius: 3px; cursor: pointer; margin-bottom: 5px;
         }
         .action-form button:hover {
@@ -135,7 +135,7 @@
             overflow-x: auto;       /* Apply the horizontal scrollbar here */
             align-items: stretch;   /* Make all zones equal height */
             grid-template-columns: var(--card-width) calc(var(--card-width) * 1.7) 1fr;
-            gap: 0rem;
+            gap: 1rem;
             padding: 0;
             border: none;
             overflow-x: auto;      /* This enables horizontal scrolling */
@@ -146,7 +146,7 @@
             overflow-x: auto;       /* Apply the horizontal scrollbar here */
             align-items: stretch;   /* Make all zones equal height */
             grid-template-columns: 1fr calc(var(--card-width) * 1.7) var(--card-width);
-            gap: 0rem;
+            gap: 1rem;
             padding: 0;
             border: none;
             overflow-x: auto;      /* This enables horizontal scrolling */
@@ -156,7 +156,7 @@
         .opp-mid-zone > .zone {
             flex-shrink: 0; /* Prevent zones from shrinking */
             border: 1px dashed rgba(255, 255, 255, 0.3); /* Re-add border since we removed it from the parent */
-            padding: 0.5rem;
+            padding: 0rem;
         }
         .deck-zone {
             width: var(--card-width);
@@ -168,7 +168,7 @@
             width: var(--card-width);
             height: 38vh; /* Changed from 38vh to be relative to the container's padding */
             border-radius: 15px;
-            object-fit: contain;
+            /* object-fit: fill; */
             transition: transform 0.3s ease;
             box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.5);
             transition: box-shadow 0.3s ease, transform 0.3s ease;
@@ -228,11 +228,6 @@
             display: flex;
             flex-direction: column; /* Stacks health display on top of button */
         }
-        .opp-hand-zone .health-display,
-        .opp-hand-zone .graveyard-btn {
-            transform: rotate(180deg);
-        }
-
         /* The new health display box */
         .health-display {
             background-color: rgba(20, 20, 20, 0.7);
@@ -255,13 +250,6 @@
         .graveyard-btn:hover {
             background-color: #555;
         }
-
-        /* Position the opponent's button at their top right */
-        .opp-hand-zone .graveyard-btn {
-            top: 0.5rem;
-            bottom: auto; /* Unset the bottom property */
-        }
-        /* --- Modal Styles --- */
 
         /* The modal background overlay */
         .modal {
@@ -326,7 +314,7 @@
             overflow-x: auto;          /* Creates a horizontal scrollbar ONLY when needed */
             gap: 0px;                 /* Adds a nice space between each card */
             flex-grow: 1;
-            min-width: 250px; 
+            min-width: var(--card-width); 
         }
 
         .battlefield-card {
@@ -350,12 +338,15 @@
             position: fixed; /* Positions relative to the viewport, ignoring scroll */
             z-index: 2000; /* Ensures it's on top of everything */
             width: 40vh;  /* Set a fixed width for the popup */
+            height: calc(40vh * (3.5 / 2.5)); /* ADD THIS LINE */
             pointer-events: none; /* CRITICAL: Lets mouse events pass through to elements underneath */
             border-radius: 15px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.7);
         }
         #card-image-viewer img {
             width: 100%;
+            height: 100%;                  /* ADD THIS LINE */
+            object-fit: fill;              /* ADD THIS LINE */
             border-radius: 15px; /* Match the container's rounding */
         }
         .power-display {
@@ -378,9 +369,103 @@
             color: #ffc107; /* A gold color for emphasis */
             line-height: 1;
         }
+        #sidebar-toggle-btn {
+            display: none; /* Hidden by default on large screens */
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1100;
+            background: rgba(40, 40, 60, 0.9);
+            color: white;
+            border: 1px solid #888;
+            border-radius: 5px;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            font-size: 1.8rem;
+        }
+
+        /* Media query for mobile devices */
+        @media (max-width: 800px) {
+            #sidebar-toggle-btn {
+                display: block; /* Show the button on mobile */
+            }
+
+            .game-container {
+                /* The board will now take up the full screen width */
+                grid-template-columns: 1fr;
+            }
+
+            .actions-column {
+                /* Take the sidebar out of the normal layout flow */
+                position: fixed; 
+                width: 18rem; /* Keep its original width */
+                height: 100vh;
+                z-index: 1000;
+                /* Start with the sidebar hidden off-screen to the left */
+                transform: translateX(-100%); 
+                transition: transform 0.3s ease-in-out;
+            }
+            body.sidebar-is-open .actions-column {
+                transform: translateX(0);
+                box-shadow: 5px 0px 15px rgba(0,0,0,0.5);
+            }
+
+            /* When the sidebar is open, hide the toggle button */
+            body.sidebar-is-open #sidebar-toggle-btn {
+                display: none;
+            }
+
+            .footer-container {
+                width: 100%; /* Ensure footer is full-width of the sidebar */
+            }
+        }
+        .hand-container {
+            /* This container will fill the zone and act as a reference for positioning the cards */
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .hand-card {
+            /* This makes all cards stack on top of each other in the center of the container */
+            position: absolute;
+            bottom: 0;          /* Anchor to the bottom for your hand */
+            left: 50%;          /* Move the left edge to the horizontal center */
+            
+            /* This pulls the card back by half its own width, truly centering it. CRITICAL! */
+            /* --- ADD THIS LOGIC --- */
+            --center-offset: calc((var(--i) - (var(--n) - 1) / 2));
+            --rotation: calc(var(--center-offset) * 5deg);    /* 5deg of rotation per card */
+            --x-translation: calc(var(--center-offset) * 30%); /* 30% horizontal spread per card */
+            --y-translation: calc(abs(var(--center-offset)) * 8px); /* 8px lift for cards on the edge */
+
+            transform: translateX(-50%)
+                    translateX(var(--x-translation)) 
+                    translateY(var(--y-translation)) 
+                    rotate(var(--rotation));
+            
+            /* Set the pivot point for rotation to the bottom center of the card */
+            transform-origin: bottom center; 
+        }
+        .opponent-hand-zone .hand-card {
+            bottom: auto; /* Unset the original 'bottom' anchor */
+            top: 0;       /* Anchor the cards to the top of the zone */
+            
+            /* Set the pivot point to the top center of the card */
+            transform-origin: top center; 
+
+            /* Override the y-translation to be positive, pushing the outer cards down */
+            --y-translation: calc(abs(var(--center-offset)) * 8px);
+        }
+        .opponent-hand-zone .hand-container {
+            transform: rotate(180deg);
+        }
     </style>
 </head>
 <body>
+    <button id="sidebar-toggle-btn">☰</button>
+
     <div class="game-container">
         <div class="actions-column">
             <div class="power-display">
@@ -407,15 +492,18 @@
 
         
         <div class="board">
-            <div class="zone opp-hand-zone" style="position: relative; overflow: hidden; transform: rotate(180deg);">
+            <div class="zone opponent-hand-zone">
                 <span class="zone-label">Opponent Hand ({{ info.opp.hand_size }})</span>
-                {% for i in range(info.opp.hand_size) %}
-                    <img src="{{ url_for('static', filename='images/' + info.opp.name.capitalize() + '.png') }}" class="card-img"
-                        style="position: absolute; bottom: 0rem; right: 0; margin-left: {{ loop.index0 * 10 }}vh;">
-                {% endfor %}
+                <div class="hand-container">
+                    {% for i in range(info.opp.hand_size) %}
+                        <img src="{{ url_for('static', filename='images/' + info.opp.name.capitalize() + '.png') }}"
+                            class="card-img hand-card" 
+                            style="--n: {{ info.opp.hand_size }}; --i: {{ loop.index0 }};">
+                    {% endfor %}
+                </div>
                 <div class="corner-hud">
                     <div class="health-display">HP: {{ info.opp.health }}</div>
-                    <button class="graveyard-btn" id="opp-graveyard-btntransform">Opp Graveyard</button>
+                    <button class="graveyard-btn" id="opp-graveyard-btn">Opp Graveyard</button>
                 </div>
             </div>
 
@@ -475,17 +563,19 @@
             </div>
 
             <div class="zone">
-            <span class="zone-label">My Hand ({{ info.me.hand|length }})</span>
-                {% for card in info.me.hand %}
-                    <img src="{{ url_for('static', filename=card.image_filename) }}"
-                        class="card-img" 
-                        data-image="{{ url_for('static', filename=card.image_filename) }}" 
-                        style="position: absolute; top: 0rem; left: 0rem; margin-left: {{ loop.index0 * 10 }}vh;">
-                {% endfor %}
-            <div class="corner-hud">
-                <div class="health-display">HP: {{ info.me.health }}</div>
-                <button class="graveyard-btn" id="my-graveyard-btn">My Graveyard</button>
-            </div>
+                <span class="zone-label">My Hand ({{ info.me.hand|length }})</span>
+                <div class="hand-container">
+                    {% for card in info.me.hand %}
+                        <img src="{{ url_for('static', filename=card.image_filename) }}"
+                            class="card-img hand-card" 
+                            data-image="{{ url_for('static', filename=card.image_filename) }}"
+                            style="--n: {{ info.me.hand|length }}; --i: {{ loop.index0 }};">
+                    {% endfor %}
+                </div>
+                <div class="corner-hud">
+                    <div class="health-display">HP: {{ info.me.health }}</div>
+                    <button class="graveyard-btn" id="my-graveyard-btn">My Graveyard</button>
+                </div>
             </div>
         </div>
     </div>
@@ -505,6 +595,31 @@
         const cardsContainer = document.getElementById('graveyard-cards-container');
 
         initializeCardViewer();
+
+        // --- START: SIDEBAR DEFAULTS TO OPEN ON MOBILE ---
+        const board = document.querySelector('.board');
+        const toggleBtn = document.getElementById('sidebar-toggle-btn');
+
+        // On page load, if the screen is mobile-sized, open the sidebar.
+        if (window.innerWidth <= 800) {
+            document.body.classList.add('sidebar-is-open');
+        }
+
+        // This allows the user to re-open the sidebar if they close it.
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', (event) => {
+                document.body.classList.add('sidebar-is-open');
+                event.stopPropagation();
+            });
+        }
+
+        // This allows the user to close the sidebar by tapping the board.
+        if (board) {
+            board.addEventListener('click', () => {
+                document.body.classList.remove('sidebar-is-open');
+            });
+        }
+        // --- END: SIDEBAR DEFAULTS TO OPEN ON MOBILE ---
 
         // --- Function to open the modal and display cards ---
         function showGraveyard(playerType) {
