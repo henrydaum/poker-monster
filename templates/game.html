@@ -34,7 +34,7 @@
             flex-direction: column; /* To push the footer to the bottom */
             border: 1px solid rgba(0, 0, 0, 0.2);
             padding: 0rem;
-            background-color: rgb(27, 27, 27);
+            background-color: rgb(33, 33, 33);
             height: 100svh;
             text-align: center;
         }
@@ -140,7 +140,7 @@
             padding: 0;
             border: none;
             overflow-x: auto;      /* This enables horizontal scrolling */
-            /* overflow-y: hidden;    This will hide the unwanted vertical scrollbar */
+            overflow-y: hidden;    /* This will hide the unwanted vertical scrollbar */
         }
         .opp-mid-zone {
             display: flex;          /* Use flexbox to line up the zones */
@@ -219,6 +219,7 @@
             
             /* Adds a subtle shadow to make the number pop */
             text-shadow: 0 0 20px black;
+            text-align: center;
         }
 
         .corner-hud {
@@ -473,6 +474,10 @@
             bottom: auto; /* Unset the default bottom anchor */
             top: 0.5rem;  /* Anchor it to the top instead */
         }
+        .player-hand-zone,
+        .opponent-hand-zone {
+            border: none;
+        }
     </style>
 </head>
 <body>
@@ -582,7 +587,7 @@
                 </div>
             </div>
 
-            <div class="zone">
+            <div class="zone player-hand-zone">
                 <span class="zone-label">Hand ({{ info.me.hand|length }})</span>
                 <div class="hand-container">
                     {% for card in info.me.hand %}
