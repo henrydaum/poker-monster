@@ -51,7 +51,7 @@
             min-height: 0;          /* CRITICAL: Prevents layout bugs with flex children */
             display: flex;          /* This makes it a container for the list inside it */
             flex-direction: column;
-            padding-bottom: 12rem; 
+            /* padding-bottom: 12rem;  */
         }
         .action-list, .log-content { 
             flex: 1;
@@ -67,11 +67,11 @@
             background-color: rgb(139, 139, 227); /* A slightly lighter shade of the original blue */
         }
         .footer-container {
-            position: fixed;
+            /* position: fixed;
             bottom: 0;
             left: 0;
-            width: 18rem; /* This must match the width of your actions column */
-            box-sizing: border-box; /* Ensures padding is included in the width */
+            width: 18rem; This must match the width of your actions column */
+            box-sizing: border-box;
             flex-shrink: 0;
         }
         .footer-bar {
