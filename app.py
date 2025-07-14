@@ -129,7 +129,9 @@ def get_available_actions(gs):
     def format_text(text):
         spaced_text = re.sub(r'(\B[A-Z])', r' \1', text)
         lower_text = spaced_text.lower()
-        return lower_text.capitalize()
+        capitalized_text = lower_text.capitalize()
+        final_text = capitalized_text.replace("hero", "Hero").replace("monster", "Monster")
+        return final_text
 
     for action_id in range(num_actions):  # Assuming 20 possible actions
         # print("Creating action: ", action_id)
