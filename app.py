@@ -117,6 +117,12 @@ def get_display_info(gs):
     # Viewing card info
     elif gs.game_phase == PHASE_VIEWING_CARD_INFO:
         info["special_info"] = f"{gs.cache[0].name}: {gs.cache[0].card_text} (Power Cost: {gs.cache[0].power_cost})"
+    elif gs.me.monsters_pawn_buff:
+        info["special_info"] = "Your next short card is free."
+    elif gs.me.last_stand_buff:
+        info["special_info"] = "You have the Last Stand buff."
+    elif gs.opp.last_stand_buff:
+        info["special_info"] = "Enemy has the Last Stand buff."
     # To show who is going first
     elif my_turn_number == 1:
         info["special_info"] = "You are going first" if gs.me.going_first else "You are going second"
@@ -312,41 +318,6 @@ def api_submit_action():
         game_info = get_display_info(gs)
         available_actions = get_available_actions(gs)
         return jsonify(info=game_info, actions=available_actions)
-
-# @app.route("/submit_action", methods=["POST"])
-# def submit_action():    
-#     # Load state from session
-#     gs = GameState.from_dict(session["gs"])
-#     prev_rnn_state = deserialize_rnn_state(session.get("rnn_state"))
-
-#     # Get action_id from the form submission
-#     action_id = int(request.form["action_id"])
-#     print(f"Action ID chosen: {action_id}")
-
-#     # Before enacting, give enemy AI a chance to predict your move:
-#     opp_ai = monster_ai if gs.me.name == "hero" else hero_ai
-#     _, new_rnn_state, _ = opp_ai.sample_action(gs, training=False, prev_rnn_state=prev_rnn_state, predicting=True)
-#     rnn_state = new_rnn_state
-
-#     # Execute the user's action
-#     action = create_action(gs, action_id)
-#     legal, reason = action.is_legal()
-#     action.enact() # This updates gs
-
-#     # If the game isn't over, let the AI take its turn
-#     if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
-#         gs, rnn_state = take_ai_turn(gs, rnn_state)
-#     print(gs.opp.last_turn_log)
-
-#     if gs.winner:
-#         # If there's a winner, store it in the session and redirect to the main page
-#         session["winner"] = gs.winner
-#         return redirect(url_for("choice_screen"))
-#     else:
-#         # If no winner, save the updated state and redirect back to the game board
-#         session["gs"] = gs.to_dict()
-#         session["rnn_state"] = serialize_rnn_state(rnn_state)
-#         return redirect(url_for("game"))
 
 if __name__ == "__main__":
     app.run(debug=True)

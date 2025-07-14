@@ -17,9 +17,10 @@
             background-image: url("{{ url_for('static', filename='backgrounds/' + background_image if background_image else '') }}");
             background-size: cover;
             background-repeat: no-repeat;
+            background-position: center;
             margin: 0;
+            min-height: 100svh;
             overflow: hidden;
-            height: 100svh;
         }
         .game-container {
             display: grid;
@@ -306,7 +307,7 @@
         .hp-low { color: #F44336; } /* Red */
         /* --- Graveyard Button Styles --- */
         .graveyard-btn {
-            padding: 0.5rem 1rem;
+            padding: 0.5rem 0.6rem;
             background-color: #3a3a3a;
             color: #eee;
             border: 1px solid #888;
@@ -315,7 +316,6 @@
         .graveyard-btn:hover {
             background-color: #555;
         }
-
         /* The modal background overlay */
         .modal {
             display: none; /* Hidden by default */
@@ -328,7 +328,6 @@
             overflow: auto; /* Enable scroll if needed */
             background-color: rgba(0,0,0,0.8); /* Black w/ opacity */
         }
-
         /* The modal content box */
         .modal-content {
             background-color: #1c1c1c;
@@ -706,7 +705,7 @@
                         <span class="power-value">Power: {{ info.me.power }}</span>
                     </div>
                     <div class="health-display">HP: {{ info.me.health }}</div>
-                    <button class="graveyard-btn" id="my-graveyard-btn">My Graveyard</button>
+                    <button class="graveyard-btn" id="my-graveyard-btn">Your Graveyard</button>
                 </div>
             </div>
         </div>

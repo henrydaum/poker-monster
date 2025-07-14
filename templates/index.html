@@ -6,11 +6,14 @@
     <title>Poker Monster</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}?v=2">
     <style>
-        body { font-family: sans-serif; text-align: center; padding-top: 50px; 
+        body { font-family: sans-serif; text-align: center; padding-top: 15svh; 
+                min-height: 100svh;
                 background-image: url("{{ url_for('static', filename='backgrounds/' + background_image) }}");
                 background-size: cover;
+                background-position: center;
+                overflow: hidden;
                 background-repeat: no-repeat; }
-        .container { max-width: 600px; margin: auto; padding: 20px;  background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px;  background-color: rgba(255, 255, 255, 0.8); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .winner-announcement { font-size: 36px; font-weight: bold; margin-bottom: 20px; }
         .choice-box a, .restart-button a {
             display: inline-block;

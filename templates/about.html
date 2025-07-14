@@ -6,9 +6,11 @@
     <title>About - Poker Monster</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     <style>
-        body { font-family: sans-serif; text-align: center; padding-top: 50px; 
+        body { font-family: sans-serif; text-align: center;
                 background-image: url("{{ url_for('static', filename='backgrounds/' + background_image) }}");
                 background-size: cover;
+                background-position: center;
+                margin: 0;
                 background-repeat: no-repeat; }
         .container { max-width: 800px; margin: auto; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: left;}
         a { color: #007bff; }
