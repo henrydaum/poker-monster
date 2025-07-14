@@ -274,6 +274,9 @@
             border: 1px solid #888;
             border-bottom: none; /* Remove bottom border to merge with button */
         }
+        .hp-high { color: #4CAF50; } /* Green */
+        .hp-medium { color: #FFC107; } /* Yellow */
+        .hp-low { color: #F44336; } /* Red */
         /* --- Graveyard Button Styles --- */
         .graveyard-btn {
             padding: 0.5rem 1rem;
@@ -562,7 +565,7 @@
             <div class="actions-box my-actions">
                 <h3>Your Available Actions</h3>
                 <div class="action-list">
-                    {% for action in actions %}<form action="{{ url_for('submit_action') }}" method="post" class="action-form"><input type="hidden" name="action_id" value="{{ action.id }}"><button type="submit">{{ action.name }}</button></form>{% endfor %}
+                    {% for action in actions %}<form action="{{ url_for('api_submit_action') }}" method="post" class="action-form"><input type="hidden" name="action_id" value="{{ action.id }}"><button type="submit">{{ action.name }}</button></form>{% endfor %}
                 </div>
             </div>
             <div class="footer-container">
@@ -644,7 +647,7 @@
 
                 <div class="zone power-card-container" 
                     style="--card-count: {{ info.me.power_cards|length }};">
-                    <span class="zone-label">Your Power Cards</span>
+                    <span class="zone-label">Your Power Cards<br>(Hover/Tap to View)</span>
                     {% for card in info.me.power_cards %}
                     <img src="{{ url_for('static', filename='images/' + info.me.name.capitalize() + '.png') }}" 
                         class="card-img" 
@@ -682,13 +685,9 @@
         </div>
     </div>
 <script>
-    // Wait until the entire HTML document is loaded and ready.
     document.addEventListener('DOMContentLoaded', () => {
+        let gameState = {{ info | tojson }};
 
-        // Make your Python 'info' object available to JavaScript
-        const gameState = {{ info | tojson }};
-
-        // --- Get references to all the HTML elements we need ---
         const modal = document.getElementById('graveyard-modal');
         const myGraveyardBtn = document.getElementById('my-graveyard-btn');
         const oppGraveyardBtn = document.getElementById('opp-graveyard-btn');
@@ -696,145 +695,309 @@
         const modalTitle = document.getElementById('graveyard-title');
         const cardsContainer = document.getElementById('graveyard-cards-container');
 
-        initializeCardViewer();
+        initializeUI();
 
-        // --- START: SIDEBAR DEFAULTS TO OPEN ON MOBILE ---
-        const board = document.querySelector('.board');
-        const toggleBtn = document.getElementById('sidebar-toggle-btn');
+        // **NEW**: Apply initial UI state, which now includes health colors.
+        updateStaticInfo(gameState);
 
-        // On page load, if the screen is mobile-sized, open the sidebar.
-        if (window.innerWidth <= 800) {
-            document.body.classList.add('sidebar-is-open');
-        }
-
-        // This allows the user to re-open the sidebar if they close it.
-        if (toggleBtn) {
-            toggleBtn.addEventListener('click', (event) => {
-                document.body.classList.add('sidebar-is-open');
-                event.stopPropagation();
-            });
-        }
-
-        // This allows the user to close the sidebar by tapping the board.
-        if (board) {
-            board.addEventListener('click', () => {
-                document.body.classList.remove('sidebar-is-open');
-            });
-        }
-        // --- END: SIDEBAR DEFAULTS TO OPEN ON MOBILE ---
-
-        // --- Function to open the modal and display cards ---
-        function showGraveyard(playerType) {
-            // 1. Clear any old cards from the container
-            cardsContainer.innerHTML = '';
-
-            // 2. Choose which graveyard data to use
-            let graveyardData;
-            if (playerType === 'me') {
-                modalTitle.textContent = "My Graveyard";
-                graveyardData = gameState.me.graveyard;
-            } else {
-                modalTitle.textContent = "Opponent's Graveyard";
-                graveyardData = gameState.opp.graveyard;
+        function initializeUI() {
+            const actionListContainer = document.querySelector('.action-list');
+            if (actionListContainer) {
+                actionListContainer.addEventListener('submit', handleActionSubmit);
             }
 
-            // 3. Create and add each card image to the container
+            const board = document.querySelector('.board');
+            const toggleBtn = document.getElementById('sidebar-toggle-btn');
+            if (window.innerWidth <= 800) {
+                document.body.classList.add('sidebar-is-open');
+            }
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', (event) => {
+                    document.body.classList.add('sidebar-is-open');
+                    event.stopPropagation();
+                });
+            }
+            if (board) {
+                board.addEventListener('click', () => {
+                    document.body.classList.remove('sidebar-is-open');
+                });
+            }
+
+            if (myGraveyardBtn) myGraveyardBtn.addEventListener('click', () => showGraveyard('me'));
+            if (oppGraveyardBtn) oppGraveyardBtn.addEventListener('click', () => showGraveyard('opp'));
+            if (closeModalBtn) closeModalBtn.addEventListener('click', closeModal);
+            
+            window.addEventListener('click', (event) => {
+                if (event.target == modal) closeModal();
+            });
+
+            const zoneToggleBtn = document.getElementById('zone-toggle-btn');
+            if (zoneToggleBtn) {
+                zoneToggleBtn.addEventListener('click', () => {
+                    document.body.classList.toggle('zone-labels-visible');
+                });
+            }
+            
+            initializeCardViewer();
+        }
+
+        function updatePage(data) {
+            gameState = data.info;
+            updateStaticInfo(data.info);
+            updateDynamicElements(data.info, data.actions);
+            initializeCardViewer();
+        }
+
+        /**
+         * **UPDATED**: This function now uses a helper to set health colors.
+         */
+        function updateStaticInfo(info) {
+            document.querySelector('.player-hand-zone .power-display .power-value').textContent = `Power: ${info.me.power}`;
+            document.querySelector('.player-mid-zone .deck-count').textContent = info.me.deck_size;
+            document.querySelector('.opp-mid-zone .deck-count').textContent = info.opp.deck_size;
+            document.querySelector('.footer-bar h2').textContent = `${info.turn_priority.toUpperCase()} - Turn ${info.turn_number}`;
+            document.querySelector('.footer-bar > div').textContent = info.game_phase;
+
+            // Use the new helper function for both player and opponent
+            const myHealthEl = document.querySelector('.player-hand-zone .health-display');
+            const oppHealthEl = document.querySelector('.opponent-hand-zone .health-display');
+            updateHealthDisplay(myHealthEl, info.me.health);
+            updateHealthDisplay(oppHealthEl, info.opp.health);
+        }
+        
+        /**
+         * **NEW**: This helper function sets the text and color for a health element.
+         * @param {HTMLElement} element The health display div.
+         * @param {number} health The current health value.
+         */
+        function updateHealthDisplay(element, health) {
+            if (!element) return;
+            element.textContent = `HP: ${health}`;
+            
+            element.classList.remove('hp-high', 'hp-medium', 'hp-low');
+
+            if (health > 10) {
+                element.classList.add('hp-high');
+            } else if (health > 5) {
+                element.classList.add('hp-medium');
+            } else {
+                element.classList.add('hp-low');
+            }
+        }
+
+        function updateDynamicElements(info, actions) {
+            updateOpponentLog(info.opp.last_turn_log);
+            updateSpecialInfo(info.special_info);
+            updateCache(info.cache);
+            updateActionList(actions);
+            updateHand('me', info.me.hand);
+            updateBattlefield('me', info.me.battlefield);
+            updatePowerCards('me', info.me.power_cards);
+            updateHand('opp', info.opp.hand_size, info.opp.name);
+            updateBattlefield('opp', info.opp.battlefield);
+            updatePowerCards('opp', info.opp.power_cards_size, info.opp.name);
+        }
+
+        function handleActionSubmit(event) {
+            event.preventDefault();
+            const actionId = event.target.querySelector('[name="action_id"]').value;
+
+            fetch("{{ url_for('api_submit_action') }}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action_id: actionId }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.game_over) {
+                    window.location.href = "{{ url_for('choice_screen') }}";
+                } else {
+                    updatePage(data);
+                }
+            })
+            .catch(error => console.error('Error submitting action:', error));
+        }
+
+        function updateActionList(actions) {
+            const container = document.querySelector('.action-list');
+            container.innerHTML = '';
+            actions.forEach(action => {
+                const form = document.createElement('form');
+                form.className = 'action-form';
+                form.innerHTML = `<input type="hidden" name="action_id" value="${action.id}"><button type="submit">${action.name}</button>`;
+                container.appendChild(form);
+            });
+        }
+
+        function updateHand(player, handData, oppName) {
+            const selector = player === 'me' ? '.player-hand-zone .hand-container' : '.opponent-hand-zone .hand-container';
+            const container = document.querySelector(selector);
+            container.innerHTML = '';
+
+            if (player === 'me') {
+                const handLength = handData.length;
+                handData.forEach((card, index) => {
+                    const img = document.createElement('img');
+                    img.src = `{{ url_for('static', filename='') }}${card.image_filename}`;
+                    img.className = 'card-img hand-card';
+                    img.dataset.image = img.src;
+                    img.style.cssText = `--n: ${handLength}; --i: ${index};`;
+                    container.appendChild(img);
+                });
+            } else {
+                const handSize = handData;
+                const cardBack = `{{ url_for('static', filename='images/') }}${oppName.charAt(0).toUpperCase() + oppName.slice(1)}.png`;
+                for (let i = 0; i < handSize; i++) {
+                    const img = document.createElement('img');
+                    img.src = cardBack;
+                    img.className = 'card-img hand-card';
+                    img.style.cssText = `--n: ${handSize}; --i: ${i};`;
+                    container.appendChild(img);
+                }
+            }
+        }
+
+        function updateBattlefield(player, cards) {
+            const selector = player === 'me' ? '.player-mid-zone .battlefield-container' : '.opp-mid-zone .battlefield-container';
+            const container = document.querySelector(selector);
+            container.querySelectorAll('.card-img').forEach(el => el.remove());
+
+            cards.forEach(card => {
+                const img = document.createElement('img');
+                img.src = `{{ url_for('static', filename='') }}${card.image_filename}`;
+                img.className = 'card-img battlefield-card';
+                img.dataset.image = img.src;
+                container.appendChild(img);
+            });
+        }
+
+        function updatePowerCards(player, data, oppName) {
+            const selector = player === 'me' ? '.player-mid-zone .power-card-container' : '.opp-mid-zone .power-card-container';
+            const container = document.querySelector(selector);
+            container.querySelectorAll('.card-img').forEach(el => el.remove());
+
+            if (player === 'me') {
+                container.style.cssText = `--card-count: ${data.length};`;
+                const cardBack = `{{ url_for('static', filename='images/') }}${gameState.me.name.charAt(0).toUpperCase() + gameState.me.name.slice(1)}.png`;
+                data.forEach((card, index) => {
+                    const img = document.createElement('img');
+                    img.src = cardBack;
+                    img.className = 'card-img';
+                    img.dataset.image = `{{ url_for('static', filename='') }}${card.image_filename}`;
+                    img.style.cssText = `--card-index: ${index};`;
+                    container.appendChild(img);
+                });
+            } else {
+                container.style.cssText = `--card-count: ${data};`;
+                const cardBack = `{{ url_for('static', filename='images/') }}${oppName.charAt(0).toUpperCase() + oppName.slice(1)}.png`;
+                for (let i = 0; i < data; i++) {
+                    const img = document.createElement('img');
+                    img.src = cardBack;
+                    img.className = 'card-img';
+                    img.style.cssText = `--card-index: ${i};`;
+                    container.appendChild(img);
+                }
+            }
+        }
+
+        function updateOpponentLog(log) {
+            const container = document.querySelector('.opponent-actions .log-content');
+            container.innerHTML = '';
+            if (log && log.length > 0) {
+                log.forEach((entry, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'log-item';
+                    div.textContent = `${index + 1}. ${entry}`;
+                    container.appendChild(div);
+                });
+            } else {
+                container.appendChild(document.createElement('p')).textContent = 'No enemy actions.';
+            }
+        }
+
+        function updateSpecialInfo(info) {
+            const container = document.querySelector('.footer-container');
+            let box = container.querySelector('.special-info-box');
+            if (box) box.remove();
+            
+            if (info) {
+                box = document.createElement('div');
+                box.className = 'special-info-box';
+                box.textContent = info;
+                container.prepend(box);
+            }
+        }
+
+        function updateCache(cache) {
+            const container = document.querySelector('.cache-display');
+            if (cache && cache.length > 0) {
+                const cacheString = cache.map(card => card.name).join(', ');
+                container.innerHTML = `<strong>Cache:</strong> [ ${cacheString} ]`;
+            } else {
+                container.innerHTML = '';
+            }
+        }
+
+        function showGraveyard(playerType) {
+            cardsContainer.innerHTML = '';
+            const graveyardData = (playerType === 'me') ? gameState.me.graveyard : gameState.opp.graveyard;
+            modalTitle.textContent = (playerType === 'me') ? "My Graveyard" : "Opponent's Graveyard";
+
             if (graveyardData && graveyardData.length > 0) {
                 graveyardData.forEach(card => {
                     const cardImg = document.createElement('img');
-                    // Assuming your card object has an 'image_filename' property
                     cardImg.src = `{{ url_for('static', filename='') }}${card.image_filename}`;
                     cardsContainer.appendChild(cardImg);
                 });
             } else {
                 cardsContainer.innerHTML = '<p style="color: #999;">Graveyard is empty.</p>';
             }
-
-            // 4. Display the modal
             modal.style.display = 'block';
         }
 
-        // --- Function to close the modal ---
         function closeModal() {
             modal.style.display = 'none';
         }
+        
+        function initializeCardViewer() {
+            const cardElements = document.querySelectorAll('[data-image]');
+            const viewer = document.getElementById('card-image-viewer');
+            const viewerImg = viewer.querySelector('img');
 
-        // --- Attach the functions to button clicks ---
-        // Add a check to ensure the buttons exist before adding listeners
-        if (myGraveyardBtn) {
-            myGraveyardBtn.addEventListener('click', () => showGraveyard('me'));
-        }
-        if (oppGraveyardBtn) {
-            oppGraveyardBtn.addEventListener('click', () => showGraveyard('opp'));
-        }
-        if (closeModalBtn) {
-            closeModalBtn.addEventListener('click', closeModal);
-        }
+            cardElements.forEach(card => {
+                if (card.dataset.viewerInitialized) return;
+                card.dataset.viewerInitialized = true;
+                
+                card.addEventListener('mouseenter', () => {
+                    viewerImg.src = card.dataset.image;
+                    viewer.style.display = 'block';
+                });
+                
+                card.addEventListener('mouseleave', () => {
+                    viewer.style.display = 'none';
+                });
 
-        // Also close the modal if the user clicks on the dark background
-        window.addEventListener('click', (event) => {
-            if (event.target == modal) {
-                closeModal();
-            }
-        });
+                card.addEventListener('mousemove', e => {
+                    const viewerWidth = viewer.offsetWidth;
+                    const viewerHeight = viewer.offsetHeight;
+                    const windowWidth = window.innerWidth;
+                    const windowHeight = window.innerHeight;
+                    let top = e.pageY + 20;
+                    let left = e.pageX + 20;
 
-        // --- Zone Label Toggle ---
-        const zoneToggleBtn = document.getElementById('zone-toggle-btn');
-        if (zoneToggleBtn) {
-            zoneToggleBtn.addEventListener('click', () => {
-                document.body.classList.toggle('zone-labels-visible');
+                    if (left + viewerWidth > windowWidth) {
+                        left = e.pageX - viewerWidth - 20;
+                    }
+                    if (top + viewerHeight > windowHeight) {
+                        top = e.pageY - viewerHeight - 20;
+                    }
+                    
+                    viewer.style.left = left + 'px';
+                    viewer.style.top = top + 'px';
+                });
             });
         }
     });
-
-    function initializeCardViewer() {
-        const cardElements = document.querySelectorAll('[data-image]');
-        const viewer = document.getElementById('card-image-viewer');
-        const viewerImg = viewer.querySelector('img');
-
-        cardElements.forEach(card => {
-            // This is a flag to prevent adding the same listeners multiple times
-            if (card.dataset.viewerInitialized) return;
-            card.dataset.viewerInitialized = true;
-            
-            card.addEventListener('mouseenter', () => {
-                viewerImg.src = card.dataset.image;
-                viewer.style.display = 'block';
-            });
-            
-            card.addEventListener('mouseleave', () => {
-                viewer.style.display = 'none';
-            });
-
-            card.addEventListener('mousemove', e => {
-                // Get the dimensions of the viewer popup and the window
-                const viewerWidth = viewer.offsetWidth;
-                const viewerHeight = viewer.offsetHeight;
-                const windowWidth = window.innerWidth;
-                const windowHeight = window.innerHeight;
-
-                // Default position: to the bottom-right of the cursor
-                let top = e.pageY + 20;
-                let left = e.pageX + 20;
-
-                // --- Boundary-checking logic ---
-                
-                // If the popup would go off the right edge, flip it to the left of the cursor
-                if (left + viewerWidth > windowWidth) {
-                    left = e.pageX - viewerWidth - 20;
-                }
-
-                // If the popup would go off the bottom edge, flip it above the cursor
-                if (top + viewerHeight > windowHeight) {
-                    top = e.pageY - viewerHeight - 20;
-                }
-                
-                // Apply the final, corrected position
-                viewer.style.left = left + 'px';
-                viewer.style.top = top + 'px';
-            });
-        });
-    }
 </script>
 <div id="graveyard-modal" class="modal">
     <div class="modal-content">

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, session, request
+from flask import Flask, render_template, redirect, url_for, session, request, jsonify
 from flask_session import Session
 from flask_socketio import SocketIO, emit
 from datetime import timedelta
@@ -271,16 +271,19 @@ def game():
     
     return render_template("game.html", info=game_info, actions=available_actions, player_role=player_role_class, background_image=background_image)
 
-@app.route("/submit_action", methods=["POST"])
-def submit_action():    
+@app.route("/api/submit_action", methods=["POST"])
+def api_submit_action():    
     # Load state from session
+    if "gs" not in session:
+        return jsonify({"error": "No game in session"}), 400
+        
     gs = GameState.from_dict(session["gs"])
     prev_rnn_state = deserialize_rnn_state(session.get("rnn_state"))
 
-    # Get action_id from the form submission
-    action_id = int(request.form["action_id"])
-    print(f"Action ID chosen: {action_id}")
-
+    # Get action_id from the JSON data sent by JavaScript
+    data = request.get_json()
+    action_id = int(data["action_id"])
+    
     # Before enacting, give enemy AI a chance to predict your move:
     opp_ai = monster_ai if gs.me.name == "hero" else hero_ai
     _, new_rnn_state, _ = opp_ai.sample_action(gs, training=False, prev_rnn_state=prev_rnn_state, predicting=True)
@@ -288,23 +291,60 @@ def submit_action():
 
     # Execute the user's action
     action = create_action(gs, action_id)
-    legal, reason = action.is_legal()
     action.enact() # This updates gs
 
     # If the game isn't over, let the AI take its turn
     if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
         gs, rnn_state = take_ai_turn(gs, rnn_state)
-    print(gs.opp.last_turn_log)
+
+    # Save the final state back to the session
+    session["gs"] = gs.to_dict()
+    session["rnn_state"] = serialize_rnn_state(rnn_state)
 
     if gs.winner:
-        # If there's a winner, store it in the session and redirect to the main page
         session["winner"] = gs.winner
-        return redirect(url_for("choice_screen"))
+        # Return a special response indicating the game is over
+        return jsonify({"game_over": True, "winner": gs.winner})
     else:
-        # If no winner, save the updated state and redirect back to the game board
-        session["gs"] = gs.to_dict()
-        session["rnn_state"] = serialize_rnn_state(rnn_state)
-        return redirect(url_for("game"))
+        # Instead of redirecting, package the new state into JSON and send it back
+        game_info = get_display_info(gs)
+        available_actions = get_available_actions(gs)
+        return jsonify(info=game_info, actions=available_actions)
+
+# @app.route("/submit_action", methods=["POST"])
+# def submit_action():    
+#     # Load state from session
+#     gs = GameState.from_dict(session["gs"])
+#     prev_rnn_state = deserialize_rnn_state(session.get("rnn_state"))
+
+#     # Get action_id from the form submission
+#     action_id = int(request.form["action_id"])
+#     print(f"Action ID chosen: {action_id}")
+
+#     # Before enacting, give enemy AI a chance to predict your move:
+#     opp_ai = monster_ai if gs.me.name == "hero" else hero_ai
+#     _, new_rnn_state, _ = opp_ai.sample_action(gs, training=False, prev_rnn_state=prev_rnn_state, predicting=True)
+#     rnn_state = new_rnn_state
+
+#     # Execute the user's action
+#     action = create_action(gs, action_id)
+#     legal, reason = action.is_legal()
+#     action.enact() # This updates gs
+
+#     # If the game isn't over, let the AI take its turn
+#     if gs.winner is None and gs.me.player_type.startswith("computer_ai"):
+#         gs, rnn_state = take_ai_turn(gs, rnn_state)
+#     print(gs.opp.last_turn_log)
+
+#     if gs.winner:
+#         # If there's a winner, store it in the session and redirect to the main page
+#         session["winner"] = gs.winner
+#         return redirect(url_for("choice_screen"))
+#     else:
+#         # If no winner, save the updated state and redirect back to the game board
+#         session["gs"] = gs.to_dict()
+#         session["rnn_state"] = serialize_rnn_state(rnn_state)
+#         return redirect(url_for("game"))
 
 if __name__ == "__main__":
     app.run(debug=True)
