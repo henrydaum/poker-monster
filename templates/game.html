@@ -19,7 +19,7 @@
             background-repeat: no-repeat;
             background-position: center;
             margin: 0;
-            min-height: 101svh;
+            min-height: 100svh;
             overflow: hidden;
         }
         .game-container {
@@ -155,7 +155,7 @@
             transform: translate(-50%, -50%);
             
             /* Make the label highly visible */
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: rgb(168, 168, 168);
             color: white;
             padding: 0.5rem 1rem;
             border-radius: 5px;
@@ -191,6 +191,10 @@
             background-color: #ffc107;
             border-color: #ffc107;
             color: #333; /* Changes the '?' to a dark color for better contrast */
+        }
+        body.zone-labels-visible .deck-count{
+            text-shadow: 0 0 0px black;
+            font-size: 1.8rem;
         }
         .player-mid-zone {
             display: flex;          /* Use flexbox to line up the zones */
@@ -281,8 +285,8 @@
             /* Adds a subtle shadow to make the number pop */
             text-shadow: 0 0 20px black;
             text-align: center;
+            z-index: 16;
         }
-
         .corner-hud {
             position: absolute;
             bottom: 1svh;
@@ -337,7 +341,7 @@
             width: 80%;
             max-width: 1200px;
             position: relative;
-            border-radius: 3px;
+            border-radius: 15px;
             text-align: center;
         }
 
@@ -396,6 +400,7 @@
             height: 100%;
             width: var(--card-width);
             flex-shrink: 0;
+            padding-left: 5px;
         }
         #card-image-viewer {
             display: none; /* Hidden by default */
@@ -519,12 +524,10 @@
             #sidebar-toggle-btn {
                 display: block; /* Show the button on mobile */
             }
-        
             .game-container {
                 /* The board will now take up the full screen width */
                 grid-template-columns: 1fr;
             }
-        
             .actions-column {
                 /* Take the sidebar out of the normal layout flow */
                 position: fixed; 
@@ -539,12 +542,10 @@
                 transform: translateX(0);
                 box-shadow: 5px 0px 15px rgba(0,0,0,0.5);
             }
-        
             /* When the sidebar is open, hide the toggle button */
             body.sidebar-is-open #sidebar-toggle-btn {
                 display: none;
             }
-        
             .footer-container {
                 width: 100%; /* Ensure footer is full-width of the sidebar */
             }
@@ -654,7 +655,7 @@
                 </div>
 
                 <div class="zone deck-zone">
-                    <span class="zone-label">Opp Deck<br>+<br>Cards Remaining</span>
+                    <span class="zone-label">Opp Deck<br>&nbsp<br>Cards Remaining</span>
                     <img src="{{ url_for('static', filename='images/' + info.opp.name.capitalize() + '.png') }}"
                         alt="Opponent's Deck"
                         class="card-img">
@@ -664,7 +665,7 @@
 
             <div class="player-mid-zone">
                 <div class="zone deck-zone">
-                    <span class="zone-label">Your Deck<br>+<br>Cards Remaining</span>
+                    <span class="zone-label">Your Deck<br>&nbsp<br>Cards Remaining</span>
                     <img src="{{ url_for('static', filename='images/' + info.me.name.capitalize() + '.png') }}" 
                         alt="Player's Deck"
                         class="card-img">
@@ -778,7 +779,7 @@
          * **UPDATED**: This function now uses a helper to set health colors.
          */
         function updateStaticInfo(info) {
-            document.querySelector('.player-hand-zone .power-display .power-value').textContent = `Power: ${info.me.power}`;
+            document.querySelector('.player-hand-zone .power-display .power-value').textContent = `🗲${info.me.power} Power`;
             document.querySelector('.player-mid-zone .deck-count').textContent = info.me.deck_size;
             document.querySelector('.opp-mid-zone .deck-count').textContent = info.opp.deck_size;
             document.querySelector('.footer-bar h2').textContent = `${info.turn_priority.toUpperCase()} - Turn ${info.turn_number}`;
@@ -993,7 +994,7 @@
         function showGraveyard(playerType) {
             cardsContainer.innerHTML = '';
             const graveyardData = (playerType === 'me') ? gameState.me.graveyard : gameState.opp.graveyard;
-            modalTitle.textContent = (playerType === 'me') ? "My Graveyard" : "Opponent's Graveyard";
+            modalTitle.textContent = (playerType === 'me') ? "Your Graveyard" : "Opponent's Graveyard";
 
             if (graveyardData && graveyardData.length > 0) {
                 graveyardData.forEach(card => {
@@ -1060,13 +1061,5 @@
     </div>
 </div>
 <div id="card-image-viewer"><img src="" alt="Card Viewer"></div>
-<script>
-    window.addEventListener('load', () => {
-        // This tiny scroll triggers the browser's UI to hide on mobile
-        setTimeout(() => {
-            window.scrollTo(0, 1);
-        }, 100); // A small delay ensures the page is ready
-    });
-</script>
 </body>
 </html>
