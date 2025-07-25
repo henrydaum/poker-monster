@@ -155,7 +155,7 @@
             transform: translate(-50%, -50%);
             
             /* Make the label highly visible */
-            background-color: rgb(168, 168, 168);
+            background-color: #6f6f6f;
             color: white;
             padding: 0.5rem 1rem;
             border-radius: 5px;
@@ -180,12 +180,17 @@
             font-size: 1.5rem;
             font-weight: bold;
             color: #fff;
-            background-color: #555;
-            border: 1px solid #555;
+            background-color: #6f6f6f;
+            border: 1px solid #6f6f6f;
             border-radius: 50%;
             width: 30px;
             height: 30px;
             cursor: pointer;
+        }
+        #zone-toggle-btn:hover {
+            /* Make the shadow larger and more pronounced on hover */
+            background-color: #7a7a7a;
+            border: 1px solid #6f6f6f;
         }
         body.zone-labels-visible #zone-toggle-btn {
             background-color: #ffc107;
