@@ -16,5 +16,3 @@ Even beyond coding, this card game has a deeply entrenched theme of good and evi
 ## Images:
 <img width="2557" height="1259" alt="Screenshot 2025-10-13 204533" src="https://github.com/user-attachments/assets/aa681b80-cafc-48c3-abce-b5646a2873e8" />
 <img width="2556" height="1259" alt="Screenshot 2025-10-13 204619" src="https://github.com/user-attachments/assets/c0d69535-990f-4433-bbc1-25ba9aa3b289" />
-![DSCF6003](static/DSCF6003.jpg)
-![DSCF6011](static/DSCF6011.jpg)
