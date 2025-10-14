@@ -3,7 +3,7 @@
 
 ---
 
-Although poker.henrydaum.site once hosted a web game, it is no longer live and redirects here — I took it down to save money on the hosting fees. This repository contains the code for a fully functional web game with an AI opponent (screenshots below). The AI opponent is good enough to beat me at my own game, although it still has room for improvement. It is a reinforcement learning model made with PyTorch code. The website design was done in HTML/CSS, and the backend code was ported using Flask. I hosted the game using Render.
+Although poker.henrydaum.site once hosted a web game, it is no longer live and redirects here — I took it down to save money on the hosting fees. This repository contains the code for a fully functional web game with an AI opponent (screenshots below). The AI opponent is good enough to beat me at my own game, although it still has room for improvement. It is a reinforcement learning model made with PyTorch code and trained over 30,000 games. The website design was done in HTML/CSS, and the backend code was ported using Flask. I hosted the game using Render.
 
 On this repository and its version history, you can find code about:
 - minimax
