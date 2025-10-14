@@ -33,9 +33,9 @@ On this repository and its version history, you can find code about:
 - world models
 - Other things I am forgetting
 
-The game engine uses mostly classical Python with no imported libraries to speak of, done mostly with four nested Classes. Each card and action was given a specific subclass.
+The game engine uses mostly classical Python with no imported libraries to speak of, done mostly with four nested Classes. Each card and action type was given a specific subclass.
 
-The game theory behind the game carefully balances attrition and tempo strategies, with the two decks using vastly different strategies.
+The game theory behind the game carefully balances attrition and tempo strategies, with the two decks having roughly equal winrates despite using vastly different strategies (not easy).
 
 Lastly, the game includes a full set of art by my sister, Charlotte Daum.
 
