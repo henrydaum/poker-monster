@@ -24,7 +24,7 @@ Although this website once hosted a web game, it is no longer live and redirects
 - temperature annealing
 - training by allowing AIs to "predict" what their opponents were doing during their turns
 - various kinds of input vector functions of various sizes
-- many different sizes of networks ranging from 10,000s to 500,000,000 parameters
+- many different sizes of networks ranging from ~10,000 to ~500,000,000 parameters
 - in addition to reinforcement learning, supervised learning on minimax results
 - various complicated training programs
 - actor-critic models (tried numerous times)
