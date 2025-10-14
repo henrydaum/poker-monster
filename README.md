@@ -1,7 +1,7 @@
 # Poker Monster
 # *Card Game* <mark>by Henry Daum</mark>
 
-The original website's no longer live — I took it down after realizing I’d spent countless hours building, breaking, and rebuilding this thing. But I learned a ton: reinforcement learning, tree search, Flask deployment, HTML, game theory, and the occasional art of giving up at the right time.
+The original website's no longer live — I took it down after realizing I’d spent countless hours building, breaking, and rebuilding this thing. But I learned a ton: reinforcement learning, tree search, Flask deployment, HTML, game theory, and the occasional art of giving up at the right time. I would call it a `failed project` solely on the basis that I could never design an AI that could play as well as I could.
 
 The code lives on here, though — as proof that I actually did make a monster.
 
