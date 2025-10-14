@@ -3,11 +3,38 @@
 
 ---
 
-The original website's no longer live — I took it down after realizing I’d spent countless hours building, breaking, and rebuilding this thing. But I learned a ton: reinforcement learning, tree search, Flask deployment, HTML, game theory, and the occasional art of giving up at the right time.
+Although this website once hosted a web game, it is no longer live and redirects here — I took it down after realizing I’d spent literally countless hours building, breaking, and rebuilding it to no avail. Everything I learned about reinforcement learning (with PyTorch), tree search, Flask deployment, HTML web design, and game theory can be found here. I tried many different approaches that can be traced to different versions. Specifically, I tried:
+- minimax
+- alpha/beta pruning
+- recurrent neural networks (RNNs)
+- long-short term memory networks (LSTMs)
+- gated recurrent units (GRUs)
+- transformers
+- feedforward networks
+- population training
+- various kinds of training loops
+- random opponents
+- REINFORCE (-log(prob)*R) with sampling
+- reward shaping with different gammas (discount factors) for different kinds of rewards
+- training on 30,000 games
+- cosine annealing learning rate scheduler
+- entropy
+- entropy annealing
+- temperature annealing
+- training by allowing AIs to "predict" what their opponents were doing during their turns
+- various kinds of input vector functions of various sizes
+- many different sizes of networks ranging from 10,000s to 500,000,000 parameters
+- in addition to reinforcement learning, supervised learning on minimax results
+- various complicated training programs
+- Other things I am forgetting
 
-The code lives on here, though — as proof that I actually did make a monster. 
+The game engine uses mostly classical Python with no imported libraries to speak of.
 
-I would call it a `failed project` solely on the basis that I could never design an AI that could play as well as *I* could. The actual game itself is almost flawless in its design, but I think that was what made it so hard for an AI to learn.
+The game theory behind the game carefully balances attrition and tempo strategies, and has a nearly 50% winrate for each deck despite the two decks using vastly different strategies.
+
+Lastly, the game includes a full set of art by my sister, Charlotte Daum.
+
+I'm not one for platitudes, but this thing really is a Monster.
 
 ---
 
