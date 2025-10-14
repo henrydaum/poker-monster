@@ -44,6 +44,10 @@ Lastly, the game includes a full set of art by my sister, Charlotte Daum.
 ## Screenshots/Video:
 <img width="2557" height="1259" alt="Screenshot 2025-10-13 204533" src="https://github.com/user-attachments/assets/aa681b80-cafc-48c3-abce-b5646a2873e8" />
 <img width="2556" height="1259" alt="Screenshot 2025-10-13 204619" src="https://github.com/user-attachments/assets/c0d69535-990f-4433-bbc1-25ba9aa3b289" />
+
+
 https://github.com/user-attachments/assets/1bce15db-fb6d-4663-8dda-0347b4e3f202
+
+### Graph
 <img width="700" height="700" alt="PokerMonsterTrainingCurves" src="https://github.com/user-attachments/assets/e7265657-00bd-4711-827d-0b2dde39c777" />
 
