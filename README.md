@@ -3,7 +3,7 @@
 
 ---
 
-This repository contains the code for a fully functional web game with an AI opponent (screenshots below). I designed the game myself, and started it about two yaers ago. The AI opponent is good enough to beat me at my own game, although it still has room for improvement. It is a reinforcement learning model made with PyTorch code and trained over 30,000 games. The website design was done in HTML/CSS, and the backend code was ported using Flask. I deployed the game using Render on poker.henrydaum.site, but I took it down to save money on the monthly fees.
+This repository contains the code for a fully functional web game with an AI opponent (screenshots below). I designed the game myself, and started it about two yaers ago. The AI opponent is good enough to beat me at my own game, although it still has room for improvement. It is a reinforcement learning model made with PyTorch code and trained over 30,000 games. The website design was done in HTML/CSS, and the backend code was ported using Flask. I deployed the game using Render on poker.henrydaum.site, but I took it down to save money on the monthly fees (they add up).
 
 On this repository and its version history, you can find code about:
 - minimax
