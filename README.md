@@ -27,6 +27,8 @@ Although this website once hosted a web game, it is no longer live and redirects
 - many different sizes of networks ranging from 10,000s to 500,000,000 parameters
 - in addition to reinforcement learning, supervised learning on minimax results
 - various complicated training programs
+- actor-critic models (tried numerous times)
+- world models
 - Other things I am forgetting
 
 The game engine uses mostly classical Python with no imported libraries to speak of, done mostly with four nested Classes. Each card and action was given a specific subclass.
