@@ -5,6 +5,7 @@
 
 Although this website once hosted a web game, it is no longer live and redirects here — I took it down after realizing I’d spent literally countless hours building, breaking, and rebuilding it to no avail. Everything I learned about reinforcement learning (with PyTorch), tree search, Flask deployment, HTML web design, and game theory can be found here. I tried many different approaches that can be traced to different versions. Specifically, I tried:
 - minimax
+- Monte-Carlo tree search (MCTS)
 - alpha/beta pruning
 - recurrent neural networks (RNNs)
 - long-short term memory networks (LSTMs)
@@ -28,9 +29,9 @@ Although this website once hosted a web game, it is no longer live and redirects
 - various complicated training programs
 - Other things I am forgetting
 
-The game engine uses mostly classical Python with no imported libraries to speak of.
+The game engine uses mostly classical Python with no imported libraries to speak of, done mostly with four nested Classes.
 
-The game theory behind the game carefully balances attrition and tempo strategies, and has a nearly 50% winrate for each deck despite the two decks using vastly different strategies.
+The game theory behind the game carefully balances attrition and tempo strategies, and has a nearly 50% winrate for each deck despite the two using vastly different strategies. Each card and action is given a specific subclass.
 
 Lastly, the game includes a full set of art by my sister, Charlotte Daum.
 
