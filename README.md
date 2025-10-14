@@ -3,9 +3,9 @@
 
 ---
 
-This repository contains the code for a fully functional web game with an AI opponent (screenshots below). I designed the game myself, and started it about two yaers ago. The AI opponent is good enough to beat me at my own game, although it still has room for improvement. It is a reinforcement learning model made with PyTorch code and trained over 30,000 games. The website design was done in HTML/CSS, and the backend code was ported using Flask. I deployed the game using Render on poker.henrydaum.site, but I took it down to save money on the monthly fees (they add up).
+This repository contains the code for a fully functional web game with an AI opponent (screenshots below). I designed the game myself, and started it about two years ago. The AI opponent is good enough to beat me at my own game, although it still has room for improvement. It is a reinforcement learning model made with PyTorch code and trained over 30,000 games. The website design was done in HTML/CSS, and the backend code was ported using Flask. I deployed the game using Render onto poker.henrydaum.site, but I took it down and it redirects here now.
 
-On this repository and its version history, you can find code about:
+On this repository with its version history, you can find code about:
 - minimax
 - Monte-Carlo tree search (MCTS)
 - alpha/beta pruning
@@ -41,6 +41,10 @@ Lastly, the game includes a full set of art by my sister, Charlotte Daum.
 
 ---
 
-## Images:
+## Screenshots/Video:
 <img width="2557" height="1259" alt="Screenshot 2025-10-13 204533" src="https://github.com/user-attachments/assets/aa681b80-cafc-48c3-abce-b5646a2873e8" />
 <img width="2556" height="1259" alt="Screenshot 2025-10-13 204619" src="https://github.com/user-attachments/assets/c0d69535-990f-4433-bbc1-25ba9aa3b289" />
+
+
+https://github.com/user-attachments/assets/1bce15db-fb6d-4663-8dda-0347b4e3f202
+
