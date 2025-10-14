@@ -7,7 +7,7 @@ The code lives on here, though — as proof that I actually did make a monster.
 
 I would call it a `failed project` solely on the basis that I could never design an AI that could play as well as *I* could. The actual game itself is almost flawless in its design, but I think that was what made it so hard for an AI to learn.
 
-Even beyond coding, this card game has a deeply entrenched theme of good and evil that continues to fascinate me, even *two years later*.
+Even beyond coding, this card game has a deeply entrenched theme of good and evil that continues to fascinate me, even two years later.
 
 ## Screenshots:
 <img width="2557" height="1259" alt="Screenshot 2025-10-13 204533" src="https://github.com/user-attachments/assets/aa681b80-cafc-48c3-abce-b5646a2873e8" />
