@@ -1,9 +1,9 @@
 # Poker Monster
-## *Strategy Card Game and AI Attempt* <mark>by Henry Daum with art by Charlotte Daum</mark>
+## *Strategy Card Game and AI Project* <mark>by Henry Daum with art by Charlotte Daum</mark>
 
 ---
 
-Although this website once hosted a web game, it is no longer live and redirects here — I took it down after realizing I’d spent literally countless hours building, breaking, and rebuilding it to no avail. Everything I learned about reinforcement learning (with PyTorch), tree search, Flask deployment, HTML web design, and game theory can be found here. I tried many different approaches that can be traced to different versions. Specifically, I tried:
+Although this website once hosted a web game, it is no longer live and redirects here — I took it down after realizing I’d spent literally countless hours building, breaking, and rebuilding it. Everything I learned about reinforcement learning (with PyTorch), tree search, Flask deployment, HTML web design, and game theory with this project can be found here. I tried many different approaches that can be traced to different versions. Specifically, I tried:
 - minimax
 - Monte-Carlo tree search (MCTS)
 - alpha/beta pruning
@@ -33,11 +33,9 @@ Although this website once hosted a web game, it is no longer live and redirects
 
 The game engine uses mostly classical Python with no imported libraries to speak of, done mostly with four nested Classes. Each card and action was given a specific subclass.
 
-The game theory behind the game carefully balances attrition and tempo strategies, and has a nearly 50% winrate for each deck despite the two using vastly different strategies.
+The game theory behind the game carefully balances attrition and tempo strategies, with the two decks using vastly different strategies.
 
 Lastly, the game includes a full set of art by my sister, Charlotte Daum.
-
-I'm not one for platitudes, but this thing really is a Monster.
 
 ---
 
