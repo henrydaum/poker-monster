@@ -48,6 +48,6 @@ Lastly, the game includes a full set of art by my sister, Charlotte Daum.
 
 https://github.com/user-attachments/assets/1bce15db-fb6d-4663-8dda-0347b4e3f202
 
-### A Training Graph:
-<img width="700" height="700" alt="PokerMonsterTrainingCurves" src="https://github.com/user-attachments/assets/e7265657-00bd-4711-827d-0b2dde39c777" />
+### Example Training Graph:
+<img width="330" height="330" alt="PokerMonsterTrainingCurves" src="https://github.com/user-attachments/assets/e7265657-00bd-4711-827d-0b2dde39c777" />
 
