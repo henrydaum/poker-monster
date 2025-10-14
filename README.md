@@ -3,7 +3,7 @@
 
 ---
 
-Although this website once hosted a web game, it is no longer live and redirects here — I took it down after realizing I’d spent literally countless hours building, breaking, and rebuilding it. Everything I learned about reinforcement learning (with PyTorch), tree search, Flask deployment, HTML web design, and game theory with this project can be found here. I tried many different approaches that can be traced to different versions. Specifically, I tried:
+Although poker.henrydaum.site once hosted a web game, it is no longer live and redirects here — I took it down after realizing I’d spent literally countless hours building, breaking, and rebuilding this thing. It wasn't a waste of time, though. I learned a ton about reinforcement learning (with PyTorch), tree search, Flask deployment, HTML web design, and game theory. This repository is proof of that. I tried many different approaches that can be traced to various versions. On this repository, you can learn about:
 - minimax
 - Monte-Carlo tree search (MCTS)
 - alpha/beta pruning
