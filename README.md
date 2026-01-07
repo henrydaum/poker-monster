@@ -31,7 +31,6 @@ On this repository, within its version history, you can find code about:
 - various complicated training programs
 - actor-critic models (tried numerous times)
 - world models
-- Other things I am forgetting
 
 The game engine uses mostly classical Python with no imported libraries to speak of, done mostly with four nested Classes. Each card and action type was given a specific subclass.
 
